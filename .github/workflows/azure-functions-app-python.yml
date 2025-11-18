@@ -1,0 +1,100 @@
+# This workflow will build a Python app and deploy it to an Azure Functions App on Linux when a commit is pushed to your default branch.
+#
+# This workflow assumes you have already created the target Azure Functions app.
+# For instructions see https://learn.microsoft.com/en-us/azure/azure-functions/create-first-function-vs-code-python?pivots=python-mode-configuration
+#
+# To configure this workflow:
+# 1. Set up the following secrets in your repository:
+#   - AZURE_FUNCTIONAPP_PUBLISH_PROFILE
+# 2. Change env variables for your configuration.
+#
+# For more information on:
+#   - GitHub Actions for Azure: https://github.com/Azure/Actions
+#   - Azure Functions Action: https://github.com/Azure/functions-action
+#   - Publish Profile: https://github.com/Azure/functions-action#using-publish-profile-as-deployment-credential-recommended
+#   - Azure Service Principal for RBAC: https://github.com/Azure/functions-action#using-azure-service-principal-for-rbac-as-deployment-credential
+#
+# For more samples to get started with GitHub Action workflows to deploy to Azure: https://github.com/Azure/actions-workflow-samples/tree/master/FunctionApp
+
+name: Run download_binance on Azure Container Instance (BTCUSDT 1m)
+
+on:
+  workflow_dispatch: {}   # roda manualmente na UI do GitHub
+  # se quiser rodar em todo push na master:
+  # push:
+  #   branches: ["master"]
+
+env:
+  IMAGE_NAME: itb-btcusdt-1m        # nome lógico da imagem
+  AZURE_RESOURCE_GROUP: itb-rg      # ajuste p/ seu RG
+  AZURE_ACR_NAME: itbacr           # nome do ACR (sem .azurecr.io)
+  AZURE_CONTAINER_NAME: itb-dl-1m   # nome da instância de container
+  AZURE_STORAGE_ACCOUNT: itbstorage # storage account para o share
+  AZURE_FILE_SHARE: data-itb-1m     # file share onde ficam os dados
+  DATA_MOUNT_PATH: /data_1m         # precisa bater com data_folder no config
+
+jobs:
+  build-and-run-download:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          # AZURE_CREDENTIALS = JSON do service principal (appId, password, tenant, subscriptionId)
+
+      - name: Build Docker image
+        run: |
+          IMAGE_TAG=${{ env.AZURE_ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+          docker build -t $IMAGE_TAG .
+
+      - name: Login to ACR
+        run: |
+          az acr login --name ${{ env.AZURE_ACR_NAME }}
+
+      - name: Push image to ACR
+        run: |
+          docker push $IMAGE_TAG
+
+      - name: Run download_binance in Azure Container Instance
+        run: |
+          # apagar container antigo se existir (ou usar restartPolicy: Never)
+          az container delete \
+            --name ${{ env.AZURE_CONTAINER_NAME }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --yes || true
+
+          # criar nova container instance para rodar apenas o download e sair
+          az container create \
+            --name ${{ env.AZURE_CONTAINER_NAME }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image $IMAGE_TAG \
+            --restart-policy Never \
+            --cpu 1 \
+            --memory 2 \
+            --environment-variables \
+              BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }} \
+              BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }} \
+            --azure-file-volume-share-name ${{ env.AZURE_FILE_SHARE }} \
+            --azure-file-volume-account-name ${{ env.AZURE_STORAGE_ACCOUNT }} \
+            --azure-file-volume-account-key ${{ secrets.AZURE_STORAGE_KEY }} \
+            --azure-file-volume-mount-path ${{ env.DATA_MOUNT_PATH }} \
+            --command-line "python -m scripts.download_binance -c configs/btcusdt_1m_dev.jsonc"
+
+          # aguarda até o container terminar
+          az container wait \
+            --name ${{ env.AZURE_CONTAINER_NAME }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --custom "instanceView.state=='Terminated'"
+
+          # mostra logs
+          az container logs \
+            --name ${{ env.AZURE_CONTAINER_NAME }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }}# Remove publish-profile to use Azure RBAC
+        scm-do-build-during-deployment: true
+        enable-oryx-build: true
