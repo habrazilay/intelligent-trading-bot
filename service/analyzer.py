@@ -127,6 +127,11 @@ class Analyzer:
             Example: { 'BTCUSDT': [ [], [], [] ] }
         :type dict:
         """
+        # Ignore empty or missing kline data
+        if not data or all(len(v) == 0 for v in data.values()):
+            log.warning("append_klines received empty kline data. Skipping update.")
+            return
+
         freq = self.config["freq"]
         interval_length_ms = pandas_interval_length_ms(freq)
         interval_length_td = pd.Timedelta(freq).to_pytimedelta()
@@ -140,7 +145,14 @@ class Analyzer:
                 try:
                     ds_symbol = ds.get("folder")
                     klines = data.get(ds_symbol)
+                    if not klines:
+                        log.warning(f"No klines found for symbol {ds_symbol}. Skipping this data source.")
+                        continue
                     df = klines_to_df(klines)
+
+                    if df is None or df.empty:
+                        log.warning(f"klines_to_df returned empty dataframe for {ds_symbol}. Skipping.")
+                        continue
 
                     # Validate
                     if df.isnull().any().any():

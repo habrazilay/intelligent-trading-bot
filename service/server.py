@@ -54,10 +54,18 @@ async def main_task():
         log.error(f"Error in main_collector_task function: {res}")
         return res
 
-    # TODO: Validation
-    #last_kline_ts = App.analyzer.get_last_kline_ts(symbol)
-    #if last_kline_ts + 60_000 != startTime:
-    #    log.error(f"Problem during analysis. Last kline end ts {last_kline_ts + 60_000} not equal to start of current interval {startTime}.")
+    freq = App.config.get("pandas_freq", App.config.get("freq"))
+    last_kline_dt = App.analyzer.get_last_kline_dt() if App.analyzer else None
+    if freq and last_kline_dt is not None:
+        interval_ms = pandas_interval_length_ms(freq)
+        last_kline_end_ts = int(last_kline_dt.value // 1_000_000) + interval_ms
+        current_interval_start, _ = pandas_get_interval(freq)
+        if last_kline_end_ts != current_interval_start:
+            log.error(
+                f"Problem during analysis. Last kline end ts {last_kline_end_ts} "
+                f"not equal to start of current interval {current_interval_start}."
+            )
+            return
 
     #
     # 2. Apply transformations and generate derived columns for the appended data
@@ -91,7 +99,7 @@ async def main_collector_task():
     sync_data_collector_task, data_provider_health_check = get_collector_functions(venue)
 
     symbol = App.config["symbol"]
-    freq = App.config["freq"]
+    freq = App.config.get("pandas_freq", App.config.get("freq"))
     start_ts, end_ts = pandas_get_interval(freq)
     now_ts = now_timestamp()
 
@@ -136,7 +144,7 @@ def start_server(config_file):
     App.config["train"] = False  # Server does not train - it only predicts therefore disable train mode
 
     symbol = App.config["symbol"]
-    freq = App.config["freq"]
+    freq = App.config.get("pandas_freq", App.config.get("freq"))
     venue = App.config.get("venue")
     try:
         if venue is not None:

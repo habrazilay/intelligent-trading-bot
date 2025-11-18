@@ -151,12 +151,34 @@ def merge_data_sources(data_sources: list):
         # If different data sets have different semantics for timestamps, then data must be shifted accordingly
         df_out = df_out.join(ds["df"])
 
-    # Interpolate numeric columns
+    # Interpolate numeric columns (optional & controlado)
     merge_interpolate = App.config.get("merge_interpolate", False)
     if merge_interpolate:
-        num_columns = df_out.select_dtypes((float, int)).columns.tolist()
+        time_column = App.config["time_column"]
+
+        # lista de colunas que PODEM ser interpoladas (opcional no config)
+        cols_cfg = App.config.get("merge_interpolate_columns")
+        max_gap = App.config.get("merge_interpolate_max_gap")  # em número de passos, ex: 3, 5, 10...
+
+        if cols_cfg:
+            num_columns = [c for c in cols_cfg if c in df_out.columns]
+        else:
+            # fallback: todos os numéricos
+            num_columns = df_out.select_dtypes(include=[np.number]).columns.tolist()
+
+        # garante que não vamos mexer na coluna de tempo
+        if time_column in num_columns:
+            num_columns.remove(time_column)
+
+        print(f"Interpolando colunas numéricas: {num_columns}")
         for col in num_columns:
-            df_out[col] = df_out[col].interpolate()
+            before_nans = df_out[col].isna().sum()
+            if max_gap:
+                df_out[col] = df_out[col].interpolate(limit=max_gap)
+            else:
+                df_out[col] = df_out[col].interpolate()
+            after_nans = df_out[col].isna().sum()
+            print(f"  - {col}: NaNs antes={before_nans}, depois={after_nans}")
 
     return df_out
 
