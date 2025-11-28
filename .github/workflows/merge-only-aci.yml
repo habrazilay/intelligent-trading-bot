@@ -1,4 +1,4 @@
-name: Run merge_new only on Azure ACI (ACR + FileShare)
+name: Run merge_new + features_new on Azure ACI (ACR + FileShare)
 
 on:
   workflow_dispatch:
@@ -33,7 +33,7 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Run merge_new in Azure Container Instance
+      - name: Run merge_new + features_new in Azure Container Instance
         run: |
           CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-merge-only
 
@@ -45,6 +45,7 @@ jobs:
             --yes || true
 
           echo "🔄 Creating merge-only container $CONTAINER_NAME with image $DOCKER_IMAGE..."
+          echo "   This container will run: merge_new -> features_new"
           az container create \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
@@ -61,7 +62,7 @@ jobs:
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --no-wait \
-            --command-line "python -m scripts.merge_new -c $CONFIG_PATH"
+            --command-line "sh -c 'python -m scripts.merge_new -c $CONFIG_PATH && python -m scripts.features_new -c $CONFIG_PATH'"
 
           echo "⏳ Waiting for merge-only container final state..."
           for i in {1..60}; do
