@@ -91,17 +91,21 @@ jobs:
             --name $CONTAINER_NAME \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image $DOCKER_IMAGE \
+            --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username ${{ secrets.DOCKERHUB_USER }} \
+            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
             --environment-variables \
-              BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }} \
-              BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }} \
+                BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }} \
+                BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }} \
             --azure-file-volume-share-name ${{ env.AZURE_FILE_SHARE }} \
             --azure-file-volume-account-name ${{ env.AZURE_STORAGE_ACCOUNT }} \
             --azure-file-volume-account-key ${{ secrets.AZURE_STORAGE_KEY }} \
             --azure-file-volume-mount-path ${{ env.DATA_MOUNT_PATH }} \
-            --command-line "python -m scripts.merge_new -c $CONFIG_PATH"
+            --command-line "python -m scripts.download_binance -c $CONFIG_PATH"
 
           az container wait \
             --name $CONTAINER_NAME \
