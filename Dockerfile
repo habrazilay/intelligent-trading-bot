@@ -14,5 +14,8 @@ COPY scripts/ scripts/
 COPY service/ service/
 COPY configs/ configs/
 
+# Remove any stray top-level types.py that might shadow stdlib 'types'
+RUN rm -f /app/types.py || true
+
 # Entrada padrão - vamos sobrescrever no docker run / k8s
 CMD ["bash", "-c", "echo 'Container up. Use command override to run pipelines.'"]
