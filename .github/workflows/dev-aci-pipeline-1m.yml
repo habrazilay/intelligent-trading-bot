@@ -14,112 +14,28 @@ on:
 
 jobs:
   merge_features:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Dispatch merge-only-aci workflow
-        uses: actions/github-script@v6
-        env:
-          CONFIG_PATH: ${{ github.event.inputs.config_path }}
-          IMAGE_TAG:   ${{ github.event.inputs.image_tag }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const refName = context.ref.replace('refs/heads/', '') || 'main';
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: '.github/workflows/merge-only-aci.yml',
-              ref: refName,
-              inputs: {
-                config_path: process.env.CONFIG_PATH,
-                image_tag: process.env.IMAGE_TAG
-              }
-            });
-            core.info(`Dispatched merge-only-aci.yml on ${refName}`);
+    uses: ./.github/workflows/merge-only-aci.yml
+    with:
+      config_path: ${{ github.event.inputs.config_path }}
+      image_tag:   ${{ github.event.inputs.image_tag }}
 
   labels:
     needs: merge_features
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Dispatch labels_new-olny-aci workflow
-        uses: actions/github-script@v6
-        env:
-          CONFIG_PATH: ${{ github.event.inputs.config_path }}
-          IMAGE_TAG:   ${{ github.event.inputs.image_tag }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const refName = context.ref.replace('refs/heads/', '') || 'main';
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: '.github/workflows/labels_new-olny-aci.yml',
-              ref: refName,
-              inputs: {
-                config_path: process.env.CONFIG_PATH,
-                image_tag: process.env.IMAGE_TAG
-              }
-            });
-            core.info(`Dispatched labels_new-olny-aci.yml on ${refName}`);
+    uses: ./.github/workflows/labels_new-olny-aci.yml
+    with:
+      config_path: ${{ github.event.inputs.config_path }}
+      image_tag:   ${{ github.event.inputs.image_tag }}
 
   train:
     needs: labels
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Dispatch train-only-aci workflow
-        uses: actions/github-script@v6
-        env:
-          CONFIG_PATH: ${{ github.event.inputs.config_path }}
-          IMAGE_TAG:   ${{ github.event.inputs.image_tag }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const refName = context.ref.replace('refs/heads/', '') || 'main';
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: '.github/workflows/train-only-aci.yml',
-              ref: refName,
-              inputs: {
-                config_path: process.env.CONFIG_PATH,
-                image_tag: process.env.IMAGE_TAG
-              }
-            });
-            core.info(`Dispatched train-only-aci.yml on ${refName}`);
+    uses: ./.github/workflows/train-only-aci.yml
+    with:
+      config_path: ${{ github.event.inputs.config_path }}
+      image_tag:   ${{ github.event.inputs.image_tag }}
 
   predict_signals:
     needs: train
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Dispatch predict-signals-only-aci workflow
-        uses: actions/github-script@v6
-        env:
-          CONFIG_PATH: ${{ github.event.inputs.config_path }}
-          IMAGE_TAG:   ${{ github.event.inputs.image_tag }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const refName = context.ref.replace('refs/heads/', '') || 'main';
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: '.github/workflows/predict-signals-only-aci.yml',
-              ref: refName,
-              inputs: {
-                config_path: process.env.CONFIG_PATH,
-                image_tag: process.env.IMAGE_TAG
-              }
-            });
-            core.info(`Dispatched predict-signals-only-aci.yml on ${refName}`);
+    uses: ./.github/workflows/predict-signals-only-aci.yml
+    with:
+      config_path: ${{ github.event.inputs.config_path }}
+      image_tag:   ${{ github.event.inputs.image_tag }}
