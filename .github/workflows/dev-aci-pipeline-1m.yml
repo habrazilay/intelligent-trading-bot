@@ -15,6 +15,7 @@ on:
 jobs:
   merge_features:
     uses: ./.github/workflows/merge-only-aci.yml
+    secrets: inherit              
     with:
       config_path: ${{ github.event.inputs.config_path }}
       image_tag:   ${{ github.event.inputs.image_tag }}
@@ -22,6 +23,7 @@ jobs:
   labels:
     needs: merge_features
     uses: ./.github/workflows/labels_new-olny-aci.yml
+    secrets: inherit
     with:
       config_path: ${{ github.event.inputs.config_path }}
       image_tag:   ${{ github.event.inputs.image_tag }}
@@ -29,6 +31,7 @@ jobs:
   train:
     needs: labels
     uses: ./.github/workflows/train-only-aci.yml
+    secrets: inherit
     with:
       config_path: ${{ github.event.inputs.config_path }}
       image_tag:   ${{ github.event.inputs.image_tag }}
@@ -36,6 +39,7 @@ jobs:
   predict_signals:
     needs: train
     uses: ./.github/workflows/predict-signals-only-aci.yml
+    secrets: inherit
     with:
       config_path: ${{ github.event.inputs.config_path }}
       image_tag:   ${{ github.event.inputs.image_tag }}
