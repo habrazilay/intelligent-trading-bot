@@ -36,38 +36,36 @@ jobs:
           CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-download
 
           az container delete \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
           az container create \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image $DOCKER_IMAGE \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
             --os-type Linux \
             --registry-login-server index.docker.io \
-            --registry-username ${{ secrets.DOCKERHUB_USER }} \
-            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
-            --environment-variables \
-              BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }} \
-              BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }} \
-            --azure-file-volume-share-name ${{ env.AZURE_FILE_SHARE }} \
-            --azure-file-volume-account-name ${{ env.AZURE_STORAGE_ACCOUNT }} \
-            --azure-file-volume-account-key ${{ secrets.AZURE_STORAGE_KEY }} \
-            --azure-file-volume-mount-path ${{ env.DATA_MOUNT_PATH }} \
+            --environment-variables BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY }}" BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET }}" \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.download_binance -c $CONFIG_PATH"
 
           az container wait \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --custom "instanceView.state=='Terminated'"
 
           az container logs \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
 
   merge:
     runs-on: ubuntu-latest
@@ -86,38 +84,36 @@ jobs:
           CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-merge
 
           az container delete \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
           az container create \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image $DOCKER_IMAGE \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
             --os-type Linux \
             --registry-login-server index.docker.io \
-            --registry-username ${{ secrets.DOCKERHUB_USER }} \
-            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
-            --environment-variables \
-                BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }} \
-                BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }} \
-            --azure-file-volume-share-name ${{ env.AZURE_FILE_SHARE }} \
-            --azure-file-volume-account-name ${{ env.AZURE_STORAGE_ACCOUNT }} \
-            --azure-file-volume-account-key ${{ secrets.AZURE_STORAGE_KEY }} \
-            --azure-file-volume-mount-path ${{ env.DATA_MOUNT_PATH }} \
-            --command-line "python -m scripts.download_binance -c $CONFIG_PATH"
+            --environment-variables BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY }}" BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET }}" \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
+            --command-line "python -m scripts.merge_new -c $CONFIG_PATH"
 
           az container wait \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --custom "instanceView.state=='Terminated'"
 
           az container logs \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
 
   features:
     runs-on: ubuntu-latest
@@ -136,38 +132,36 @@ jobs:
           CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-features
 
           az container delete \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
           az container create \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image $DOCKER_IMAGE \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
             --os-type Linux \
             --registry-login-server index.docker.io \
-            --registry-username ${{ secrets.DOCKERHUB_USER }} \
-            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
-            --environment-variables \
-              BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }} \
-              BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }} \
-            --azure-file-volume-share-name ${{ env.AZURE_FILE_SHARE }} \
-            --azure-file-volume-account-name ${{ env.AZURE_STORAGE_ACCOUNT }} \
-            --azure-file-volume-account-key ${{ secrets.AZURE_STORAGE_KEY }} \
-            --azure-file-volume-mount-path ${{ env.DATA_MOUNT_PATH }} \
+            --environment-variables BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY }}" BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET }}" \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.features_new -c $CONFIG_PATH"
 
           az container wait \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --custom "instanceView.state=='Terminated'"
 
           az container logs \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
 
   labels:
     runs-on: ubuntu-latest
@@ -186,38 +180,36 @@ jobs:
           CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-labels
 
           az container delete \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
           az container create \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image $DOCKER_IMAGE \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
             --os-type Linux \
             --registry-login-server index.docker.io \
-            --registry-username ${{ secrets.DOCKERHUB_USER }} \
-            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
-            --environment-variables \
-              BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }} \
-              BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }} \
-            --azure-file-volume-share-name ${{ env.AZURE_FILE_SHARE }} \
-            --azure-file-volume-account-name ${{ env.AZURE_STORAGE_ACCOUNT }} \
-            --azure-file-volume-account-key ${{ secrets.AZURE_STORAGE_KEY }} \
-            --azure-file-volume-mount-path ${{ env.DATA_MOUNT_PATH }} \
+            --environment-variables BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY }}" BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET }}" \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.labels_new -c $CONFIG_PATH"
 
           az container wait \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --custom "instanceView.state=='Terminated'"
 
           az container logs \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
 
   train:
     runs-on: ubuntu-latest
@@ -236,38 +228,36 @@ jobs:
           CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-train
 
           az container delete \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
           az container create \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image $DOCKER_IMAGE \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
             --os-type Linux \
             --registry-login-server index.docker.io \
-            --registry-username ${{ secrets.DOCKERHUB_USER }} \
-            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
-            --environment-variables \
-              BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }} \
-              BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }} \
-            --azure-file-volume-share-name ${{ env.AZURE_FILE_SHARE }} \
-            --azure-file-volume-account-name ${{ env.AZURE_STORAGE_ACCOUNT }} \
-            --azure-file-volume-account-key ${{ secrets.AZURE_STORAGE_KEY }} \
-            --azure-file-volume-mount-path ${{ env.DATA_MOUNT_PATH }} \
+            --environment-variables BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY }}" BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET }}" \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.train -c $CONFIG_PATH"
 
           az container wait \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --custom "instanceView.state=='Terminated'"
 
           az container logs \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
 
   predict:
     runs-on: ubuntu-latest
@@ -286,38 +276,36 @@ jobs:
           CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-predict
 
           az container delete \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
           az container create \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image $DOCKER_IMAGE \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
             --os-type Linux \
             --registry-login-server index.docker.io \
-            --registry-username ${{ secrets.DOCKERHUB_USER }} \
-            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
-            --environment-variables \
-              BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }} \
-              BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }} \
-            --azure-file-volume-share-name ${{ env.AZURE_FILE_SHARE }} \
-            --azure-file-volume-account-name ${{ env.AZURE_STORAGE_ACCOUNT }} \
-            --azure-file-volume-account-key ${{ secrets.AZURE_STORAGE_KEY }} \
-            --azure-file-volume-mount-path ${{ env.DATA_MOUNT_PATH }} \
+            --environment-variables BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY }}" BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET }}" \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.predict -c $CONFIG_PATH"
 
           az container wait \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --custom "instanceView.state=='Terminated'"
 
           az container logs \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
 
   signals:
     runs-on: ubuntu-latest
@@ -336,38 +324,36 @@ jobs:
           CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-signals
 
           az container delete \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
           az container create \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image $DOCKER_IMAGE \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
             --os-type Linux \
             --registry-login-server index.docker.io \
-            --registry-username ${{ secrets.DOCKERHUB_USER }} \
-            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
-            --environment-variables \
-              BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }} \
-              BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }} \
-            --azure-file-volume-share-name ${{ env.AZURE_FILE_SHARE }} \
-            --azure-file-volume-account-name ${{ env.AZURE_STORAGE_ACCOUNT }} \
-            --azure-file-volume-account-key ${{ secrets.AZURE_STORAGE_KEY }} \
-            --azure-file-volume-mount-path ${{ env.DATA_MOUNT_PATH }} \
+            --environment-variables BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY }}" BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET }}" \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.signals -c $CONFIG_PATH"
 
           az container wait \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --custom "instanceView.state=='Terminated'"
 
           az container logs \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
 
   output:
     runs-on: ubuntu-latest
@@ -386,35 +372,33 @@ jobs:
           CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-output
 
           az container delete \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
           az container create \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image $DOCKER_IMAGE \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
             --os-type Linux \
             --registry-login-server index.docker.io \
-            --registry-username ${{ secrets.DOCKERHUB_USER }} \
-            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
-            --environment-variables \
-              BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }} \
-              BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }} \
-            --azure-file-volume-share-name ${{ env.AZURE_FILE_SHARE }} \
-            --azure-file-volume-account-name ${{ env.AZURE_STORAGE_ACCOUNT }} \
-            --azure-file-volume-account-key ${{ secrets.AZURE_STORAGE_KEY }} \
-            --azure-file-volume-mount-path ${{ env.DATA_MOUNT_PATH }} \
+            --environment-variables BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY }}" BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET }}" \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.output -c $CONFIG_PATH"
 
           az container wait \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --custom "instanceView.state=='Terminated'"
 
           az container logs \
-            --name $CONTAINER_NAME \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }}
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
