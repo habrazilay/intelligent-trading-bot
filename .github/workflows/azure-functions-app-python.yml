@@ -45,6 +45,9 @@ jobs:
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image $DOCKER_IMAGE \
             --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username ${{ secrets.DOCKERHUB_USER }} \
+            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
@@ -141,6 +144,10 @@ jobs:
             --name $CONTAINER_NAME \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image $DOCKER_IMAGE \
+            --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username ${{ secrets.DOCKERHUB_USER }} \
+            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
@@ -187,6 +194,10 @@ jobs:
             --name $CONTAINER_NAME \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image $DOCKER_IMAGE \
+            --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username ${{ secrets.DOCKERHUB_USER }} \
+            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
@@ -233,6 +244,10 @@ jobs:
             --name $CONTAINER_NAME \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image $DOCKER_IMAGE \
+            --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username ${{ secrets.DOCKERHUB_USER }} \
+            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
@@ -279,6 +294,10 @@ jobs:
             --name $CONTAINER_NAME \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image $DOCKER_IMAGE \
+            --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username ${{ secrets.DOCKERHUB_USER }} \
+            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
@@ -325,6 +344,10 @@ jobs:
             --name $CONTAINER_NAME \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image $DOCKER_IMAGE \
+            --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username ${{ secrets.DOCKERHUB_USER }} \
+            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
@@ -371,6 +394,10 @@ jobs:
             --name $CONTAINER_NAME \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image $DOCKER_IMAGE \
+            --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username ${{ secrets.DOCKERHUB_USER }} \
+            --registry-password ${{ secrets.DOCKERHUB_TOKEN }} \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
