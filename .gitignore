@@ -255,3 +255,11 @@ configs/*_dev.jsonc
 /MODELS/
 /DATA/
 /DATA_*/
+
+# Terraform local cache and state
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+infra/azure/terraform/envs/dev/*.tf
