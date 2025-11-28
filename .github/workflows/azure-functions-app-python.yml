@@ -44,6 +44,7 @@ jobs:
             --name $CONTAINER_NAME \
             --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
             --image $DOCKER_IMAGE \
+            --os-type Linux \
             --restart-policy Never \
             --cpu 1 \
             --memory 2 \
