@@ -1,0 +1,33 @@
+# Git e editor
+.git
+.gitignore
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# Ambientes virtuais
+.venv
+venv
+env
+*venv
+*.egg-info
+
+# Cache Python / testes
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+
+# Dados grandes / gerados
+DATA_ITB_*
+
+# Arquivos de treino/relatório pesados (se quiser manter leve)
+*.parquet
+*.parquet.orig
+*.csv
+*.log
+
+# Infra que não precisa ir pra imagem runtime
+infra/
+docs/

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "intelligent-trading-bot.fullname" . }}-config
+data:
+  # Optional, if you want to embed config files or small tweaks
+  # config.dev.jsonc: |-
+  #   { ... }

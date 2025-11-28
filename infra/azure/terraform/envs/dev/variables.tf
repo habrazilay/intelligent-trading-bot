@@ -1,14 +1,11 @@
-variable "location" {
-  type    = string
-  default = "eastus"
-}
-
 variable "project_name" {
-  type    = string
-  default = "itb-btcusdt-1m"
+  description = "Logical name for this environment (used as suffix/prefix in resource names)"
+  type        = string
+  default     = "itb-dev"
 }
 
-variable "image_tag" {
+variable "location" {
+  description = "Azure region"
   type        = string
-  description = "Tag completa da imagem Docker (ex: itbacr.azurecr.io/itb-btcusdt-1m:sha-xxxx)"
+  default     = "eastus"
 }

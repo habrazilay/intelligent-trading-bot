@@ -8,10 +8,10 @@ from sklearn import metrics
 from sklearn.model_selection import ParameterGrid
 from sklearn.preprocessing import StandardScaler
 
-from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC, SVR
 
-import lightgbm as lgbm
+# import lightgbm as lgbm
 
 import tensorflow as tf
 from tensorflow import keras

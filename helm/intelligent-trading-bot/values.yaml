@@ -1,0 +1,41 @@
+image:
+  repository: itbdevacr.azurecr.io/itb-bot   # overridden by CI or per-env values
+  tag: "dev-latest"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+env:
+  # app-level config
+  ITB_CONFIG: "/app/configs/btcusdt_1m_dev.jsonc"
+  ENV: "dev"
+
+  # If you download models from blob or S3-like object storage:
+  MODEL_STORAGE_ACCOUNT: ""
+  MODEL_BLOB_CONTAINER: ""
+  MODEL_BLOB_PREFIX: ""
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "500m"
+    memory: "1Gi"
+
+# Sensitive values to be rendered into a Secret
+secrets:
+  BINANCE_API_KEY: ""
+  BINANCE_API_SECRET: ""
+  TELEGRAM_BOT_TOKEN: ""
+  TELEGRAM_CHAT_ID: ""
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

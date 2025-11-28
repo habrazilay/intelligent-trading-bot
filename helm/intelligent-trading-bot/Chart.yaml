@@ -1,0 +1,6 @@
+apiVersion: v2
+name: intelligent-trading-bot
+description: Trading signaler service for Intelligent Trading Bot
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
