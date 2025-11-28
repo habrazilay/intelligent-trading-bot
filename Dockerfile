@@ -6,8 +6,13 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia só o código-fonte relevante
-COPY common/ inputs/ outputs/ scripts/ service/ configs/ ./
+# Copy project source code, preserving directories
+COPY common/ common/
+COPY inputs/ inputs/
+COPY outputs/ outputs/
+COPY scripts/ scripts/
+COPY service/ service/
+COPY configs/ configs/
 
 # Entrada padrão - vamos sobrescrever no docker run / k8s
 CMD ["bash", "-c", "echo 'Container up. Use command override to run pipelines.'"]
