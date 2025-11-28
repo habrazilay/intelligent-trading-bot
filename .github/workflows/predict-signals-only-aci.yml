@@ -11,6 +11,16 @@ on:
         description: "Image tag (just the tag, e.g. amd64-1764313462)"
         required: true
         default: "amd64-1764313462"
+  workflow_call:
+    inputs:
+      config_path:
+        description: "Path to JSONC config file"
+        required: true
+        type: string
+      image_tag:
+        description: "Image tag"
+        required: true
+        type: string
 
 env:
   ACR_LOGIN_SERVER: itbacr.azurecr.io
