@@ -15,8 +15,8 @@ from common.model_store import *
 from common.generators import generate_feature_set
 from common.generators import predict_feature_set
 
-from scripts.merge import *
-from scripts.features import *
+from scripts.merge_new import *
+from scripts.features_new import *
 
 import logging
 log = logging.getLogger('analyzer')
