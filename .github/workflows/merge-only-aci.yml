@@ -61,12 +61,7 @@ jobs:
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --no-wait \
-            --command-line "bash -lc '
-              set -e
-              echo \"🔄 Running merge_new (only)...\"
-              python -m scripts.merge_new -c \"$CONFIG_PATH\"
-              echo \"✅ merge_new completed.\"
-            '"
+            --command-line "python -m scripts.merge_new -c $CONFIG_PATH"
 
           echo "⏳ Waiting for merge-only container final state..."
           for i in {1..60}; do
