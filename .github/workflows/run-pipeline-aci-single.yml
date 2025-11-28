@@ -1,0 +1,112 @@
+name: Run full pipeline in a single Azure Container Instance
+
+on:
+  workflow_dispatch:
+    inputs:
+      config_path:
+        description: "Path to JSONC config file (e.g. configs/btcusdt_1m_dev.jsonc)"
+        required: true
+        default: "configs/btcusdt_1m_dev.jsonc"
+      image_tag:
+        description: "Docker image tag to use (e.g. habrazilay/itb-bot:amd64-1764313462)"
+        required: true
+        default: "habrazilay/itb-bot:amd64-1764313462"
+      run_download:
+        description: "Run scripts.download_binance inside Azure? (Binance may block ACI IP)"
+        required: true
+        default: "false"
+
+env:
+  DOCKER_IMAGE: ${{ github.event.inputs.image_tag }}
+  AZURE_RESOURCE_GROUP: rg-itb-dev
+  AZURE_CONTAINER_PREFIX: itb-bot
+  AZURE_STORAGE_ACCOUNT: stitbdev
+  AZURE_FILE_SHARE: data-itb-1m
+  DATA_MOUNT_PATH: /app/DATA_ITB_1m
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    env:
+      CONFIG_PATH: ${{ github.event.inputs.config_path }}
+      RUN_DOWNLOAD: ${{ github.event.inputs.run_download }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Run full pipeline in single ACI container
+        run: |
+          CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-pipeline
+
+          echo "🧹 Deletando container antigo (se existir)..."
+          az container delete \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --yes || true
+
+          echo "🚀 Criando container $CONTAINER_NAME usando imagem $DOCKER_IMAGE..."
+
+          az container create \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
+            --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
+            --restart-policy Never \
+            --cpu 1 \
+            --memory 2 \
+            --environment-variables \
+              BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY }}" \
+              BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET }}" \
+              RUN_DOWNLOAD="${{ env.RUN_DOWNLOAD }}" \
+              CONFIG_PATH="${{ env.CONFIG_PATH }}" \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
+            --command-line "bash -lc '
+              set -e
+
+              echo \"CONFIG_PATH=\$CONFIG_PATH\"
+              echo \"RUN_DOWNLOAD=\$RUN_DOWNLOAD\"
+              echo \"📁 DATA folder: ${DATA_MOUNT_PATH}\"
+
+              if [ \"\$RUN_DOWNLOAD\" = \"true\" ]; then
+                echo \"⬇️  Rodando download_binance (atenção: Binance pode bloquear IP da Azure)...\"
+                python -m scripts.download_binance -c \"\$CONFIG_PATH\"
+              else
+                echo \"⏭️  PULANDO download_binance (RUN_DOWNLOAD=false). Assumindo klines.parquet pronto no File Share.\"
+              fi
+
+              echo \"🔄 Rodando merge_new...\"
+              python -m scripts.merge_new -c \"\$CONFIG_PATH\"
+
+              echo \"🧮 Gerando features...\"
+              python -m scripts.features_new -c \"\$CONFIG_PATH\"
+
+              echo \"🏷  Gerando labels...\"
+              python -m scripts.labels_new -c \"\$CONFIG_PATH\"
+
+              echo \"🎓 Treinando modelos...\"
+              python -m scripts.train -c \"\$CONFIG_PATH\"
+
+              echo \"🔮 Gerando previsões...\"
+              python -m scripts.predict -c \"\$CONFIG_PATH\"
+
+              echo \"🚦 Gerando sinais...\"
+              python -m scripts.signals -c \"\$CONFIG_PATH\"
+
+              echo \"📤 Rodando outputs...\"
+              python -m scripts.output -c \"\$CONFIG_PATH\"
+
+              echo \"✅ Pipeline completo dentro do container \$CONTAINER_NAME\"
+            '"
+
+          echo "📜 Logs do container:"
+          az container logs \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
