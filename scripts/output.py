@@ -64,7 +64,12 @@ def main(config_file):
             #await output_feature_set(df, os, App.config, App.model_store)
             asyncio.run(output_feature_set(df, os, App.config, App.model_store))
         except Exception as e:
-            log.error(f"Error in output function: {e}. Generator: {os.get("generator")}. Output config: {os}")
+            log.error(
+                "Error in output function: %s. Generator: %s. Output config: %s",
+                e,
+                os.get("generator"),
+                os,
+            )
             return
 
     elapsed = datetime.now() - now

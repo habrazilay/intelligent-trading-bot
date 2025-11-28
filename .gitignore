@@ -250,6 +250,16 @@ cython_debug/
 
 # End of https://www.toptal.com/developers/gitignore/api/python,pycharm
 config.json
-/config*.json  # Configs may have credentials
+/configs/samples/config-*.jsonc 
+configs/*_dev.jsonc
 /MODELS/
 /DATA/
+/DATA_*/
+
+# Terraform local cache and state
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+infra/azure/terraform/envs/dev/*.tf

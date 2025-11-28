@@ -35,7 +35,7 @@ async def sync_data_collector_task(config: dict) -> dict[Any, Any] | None:
 
     data_sources = config.get("data_sources", [])
     symbols = [x.get("folder") for x in data_sources]
-    freq = config["freq"]
+    freq = config.get("pandas_freq", config["freq"])
     binance_freq = binance_freq_from_pandas(freq)
 
     if not symbols:
@@ -127,10 +127,10 @@ async def request_klines(symbol, freq, limit):
     # The problem is that the result also contains the current (still running) interval which we want to exclude
     # Exclude last kline if it corresponds to the current interval
     klines_full = [kl for kl in klines if kl[0] < start_ts]
-    last_full_kline_ts = klines_full[-1][0]
 
-    if last_full_kline_ts != start_ts - interval_length_ms:
-        log.error(f"UNEXPECTED RESULT: Last full kline timestamp {last_full_kline_ts} is not equal to previous full interval start {start_ts - interval_length_ms}. Maybe some results are missing and there are gaps.")
+    if not klines_full:
+        log.warning(f"No full klines for {symbol} in interval; returning empty.")
+        return {symbol: []}
 
     # Return all received klines with the symbol as a key
     return {symbol: klines_full}

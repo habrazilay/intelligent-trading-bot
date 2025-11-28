@@ -175,8 +175,7 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
     #
 
     # Transform str/list and list to dict with argument names as keys and column names as values
-    original_column_names = config.get('columns')
-    column_names = original_column_names
+    column_names = config.get('columns')
     if isinstance(column_names, str):
         column_names = {'real': column_names}  # Single default input series
     elif isinstance(column_names, list) and len(column_names) == 1:
@@ -213,20 +212,6 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
         fn_outs = []
         fn_out_names = []
 
-        # Escolhe o mapeamento de colunas adequado para esta função TALIB
-        fn_columns = columns
-        # Caso especial: ATR precisa explicitamente de high/low/close
-        if (
-            isinstance(original_column_names, list)
-            and len(original_column_names) == 3
-            and func_name.upper() == "ATR"
-        ):
-            fn_columns = {
-                "high": df[original_column_names[0]].interpolate(),
-                "low": df[original_column_names[1]].interpolate(),
-                "close": df[original_column_names[2]].interpolate(),
-            }
-
         # Determine if the function support stream mode
         try:
             fn = getattr(talib_mod_abstract, func_name)  # Resolve function name
@@ -250,11 +235,11 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
                 except AttributeError as e:
                     raise ValueError(f"Cannot resolve talib function name '{func_name}'. Check the (existence of) name of the function")
 
-                args = fn_columns.copy()
+                args = columns.copy()
                 if w:
                     args['timeperiod'] = w
-                if w == 1 and len(fn_columns) == 1:  # For window 1 use the original values (because talib fails to do this)
-                    out = next(iter(fn_columns.values()))
+                if w == 1 and len(columns) == 1:  # For window 1 use the original values (because talib fails to do this)
+                    out = next(iter(columns.values()))
                 else:
                     out = fn(**args)
 
@@ -272,12 +257,12 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
                 for r in range(last_rows):
                     # Remove r elements from the end
                     # Note that we do not remove elements from the start so the length is limited from one side only
-                    args = {k: v.iloc[:len(v)-r] for k, v in fn_columns.items()}
+                    args = {k: v.iloc[:len(v)-r] for k, v in columns.items()}
                     if w:
                         args['timeperiod'] = w
 
-                    if w == 1 and len(fn_columns) == 1:  # For window 1 use the original values (because talib fails to do this)
-                        col = next(iter(fn_columns.values()))
+                    if w == 1 and len(columns) == 1:  # For window 1 use the original values (because talib fails to do this)
+                        col = next(iter(columns.values()))
                         out_val = col.iloc[-r-1]
                     else:
                         out_val = fn(**args)
