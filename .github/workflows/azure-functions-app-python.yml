@@ -58,11 +58,6 @@ jobs:
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.download_binance -c $CONFIG_PATH"
 
-          az container wait \
-            --name "$CONTAINER_NAME" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --custom "instanceView.state=='Terminated'"
-
           az container logs \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
@@ -106,10 +101,6 @@ jobs:
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.merge_new -c $CONFIG_PATH"
 
-          az container wait \
-            --name "$CONTAINER_NAME" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --custom "instanceView.state=='Terminated'"
 
           az container logs \
             --name "$CONTAINER_NAME" \
@@ -154,11 +145,6 @@ jobs:
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.features_new -c $CONFIG_PATH"
 
-          az container wait \
-            --name "$CONTAINER_NAME" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --custom "instanceView.state=='Terminated'"
-
           az container logs \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
@@ -201,11 +187,6 @@ jobs:
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.labels_new -c $CONFIG_PATH"
-
-          az container wait \
-            --name "$CONTAINER_NAME" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --custom "instanceView.state=='Terminated'"
 
           az container logs \
             --name "$CONTAINER_NAME" \
@@ -250,11 +231,6 @@ jobs:
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.train -c $CONFIG_PATH"
 
-          az container wait \
-            --name "$CONTAINER_NAME" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --custom "instanceView.state=='Terminated'"
-
           az container logs \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
@@ -298,10 +274,6 @@ jobs:
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.predict -c $CONFIG_PATH"
 
-          az container wait \
-            --name "$CONTAINER_NAME" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --custom "instanceView.state=='Terminated'"
 
           az container logs \
             --name "$CONTAINER_NAME" \
@@ -346,10 +318,6 @@ jobs:
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.signals -c $CONFIG_PATH"
 
-          az container wait \
-            --name "$CONTAINER_NAME" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --custom "instanceView.state=='Terminated'"
 
           az container logs \
             --name "$CONTAINER_NAME" \
@@ -393,11 +361,6 @@ jobs:
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --command-line "python -m scripts.output -c $CONFIG_PATH"
-
-          az container wait \
-            --name "$CONTAINER_NAME" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --custom "instanceView.state=='Terminated'"
 
           az container logs \
             --name "$CONTAINER_NAME" \
