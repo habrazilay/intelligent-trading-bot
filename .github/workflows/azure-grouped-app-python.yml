@@ -1,0 +1,243 @@
+name: Run grouped pipeline on Azure Container Instances (merge+features+labels, train, predict+signals+output)
+
+on:
+  workflow_dispatch:
+    inputs:
+      config_path:
+        description: "Path to JSONC config file (e.g. configs/btcusdt_1m_dev.jsonc)"
+        required: true
+        default: "configs/btcusdt_1m_dev.jsonc"
+      image_tag:
+        description: "Docker image tag to use (e.g. habrazilay/itb-bot:amd64-1764313462)"
+        required: true
+        default: "habrazilay/itb-bot:latest"
+      run_download:
+        description: "Run scripts.download_binance inside Azure (Binance may block ACI IP). If false, assume klines.parquet already exists in the File Share."
+        required: true
+        default: "false"
+
+env:
+  DOCKER_IMAGE: ${{ github.event.inputs.image_tag }}    # Full image name from Docker Hub
+  AZURE_RESOURCE_GROUP: rg-itb-dev                     # Azure resource group (from Terraform)
+  AZURE_CONTAINER_PREFIX: itb-bot                      # Prefix for container instances
+  AZURE_STORAGE_ACCOUNT: stitbdev                      # Storage account (from Terraform output)
+  AZURE_FILE_SHARE: data-itb-1m                        # File share where data is stored
+  DATA_MOUNT_PATH: /app/DATA_ITB_1m                    # Must match data_folder in config (relative to /app)
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    env:
+      CONFIG_PATH: ${{ github.event.inputs.config_path }}
+      RUN_DOWNLOAD: ${{ github.event.inputs.run_download }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Run optional download_binance in Azure Container Instance
+        run: |
+          CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-download
+
+          echo "CONFIG_PATH=$CONFIG_PATH"
+          echo "RUN_DOWNLOAD=$RUN_DOWNLOAD"
+
+          if [ "$RUN_DOWNLOAD" != "true" ]; then
+            echo "⏭️  Skipping download_binance in Azure (RUN_DOWNLOAD=false). Assume klines.parquet already exists in the File Share."
+            exit 0
+          fi
+
+          echo "🧹 Deleting previous download container if it exists..."
+          az container delete \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --yes || true
+
+          echo "⬇️  Creating download container $CONTAINER_NAME using image $DOCKER_IMAGE..."
+          az container create \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
+            --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
+            --restart-policy Never \
+            --cpu 1 \
+            --memory 2 \
+            --environment-variables BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY }}" BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET }}" \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
+            --command-line "python -m scripts.download_binance -c $CONFIG_PATH"
+
+          echo "📜 Download container logs:"
+          az container logs \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
+
+  preprocess:
+    runs-on: ubuntu-latest
+    needs: download
+    env:
+      CONFIG_PATH: ${{ github.event.inputs.config_path }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Run merge_new + features_new + labels_new in Azure Container Instance
+        run: |
+          CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-preprocess
+
+          echo "CONFIG_PATH=$CONFIG_PATH"
+          echo "🧹 Deleting previous preprocess container if it exists..."
+          az container delete \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --yes || true
+
+          echo "🔄 Creating preprocess container $CONTAINER_NAME using image $DOCKER_IMAGE..."
+          az container create \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
+            --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
+            --restart-policy Never \
+            --cpu 1 \
+            --memory 2 \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
+            --command-line "bash -lc '
+              set -e
+              echo \"🔄 Running merge_new...\"
+              python -m scripts.merge_new -c \"$CONFIG_PATH\"
+
+              echo \"🧮 Running features_new...\"
+              python -m scripts.features_new -c \"$CONFIG_PATH\"
+
+              echo \"🏷  Running labels_new...\"
+              python -m scripts.labels_new -c \"$CONFIG_PATH\"
+
+              echo \"✅ Preprocess (merge+features+labels) completed.\"
+            '"
+
+          echo "📜 Preprocess container logs:"
+          az container logs \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
+
+  train:
+    runs-on: ubuntu-latest
+    needs: preprocess
+    env:
+      CONFIG_PATH: ${{ github.event.inputs.config_path }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Run train in Azure Container Instance
+        run: |
+          CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-train
+
+          echo "CONFIG_PATH=$CONFIG_PATH"
+          echo "🧹 Deleting previous train container if it exists..."
+          az container delete \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --yes || true
+
+          echo "🎓 Creating train container $CONTAINER_NAME using image $DOCKER_IMAGE..."
+          az container create \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
+            --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
+            --restart-policy Never \
+            --cpu 1 \
+            --memory 2 \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
+            --command-line "bash -lc '
+              set -e
+              echo \"🎓 Running train...\"
+              python -m scripts.train -c \"$CONFIG_PATH\"
+              echo \"✅ Train completed.\"
+            '"
+
+          echo "📜 Train container logs:"
+          az container logs \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
+
+  run_models:
+    runs-on: ubuntu-latest
+    needs: train
+    env:
+      CONFIG_PATH: ${{ github.event.inputs.config_path }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Run predict + signals + output in Azure Container Instance
+        run: |
+          CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-run
+
+          echo "CONFIG_PATH=$CONFIG_PATH"
+          echo "🧹 Deleting previous run container if it exists..."
+          az container delete \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --yes || true
+
+          echo "🚀 Creating run container $CONTAINER_NAME using image $DOCKER_IMAGE..."
+          az container create \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --image "$DOCKER_IMAGE" \
+            --os-type Linux \
+            --registry-login-server index.docker.io \
+            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
+            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
+            --restart-policy Never \
+            --cpu 1 \
+            --memory 2 \
+            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
+            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
+            --command-line "bash -lc '
+              set -e
+              echo \"🔮 Running predict...\"
+              python -m scripts.predict -c \"$CONFIG_PATH\"
+
+              echo \"🚦 Running signals...\"
+              python -m scripts.signals -c \"$CONFIG_PATH\"
+
+              echo \"📤 Running output...\"
+              python -m scripts.output -c \"$CONFIG_PATH\"
+
+              echo \"✅ Run (predict+signals+output) completed.\"
+            '"
+
+          echo "📜 Run container logs:"
+          az container logs \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
