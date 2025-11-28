@@ -262,4 +262,4 @@ configs/*_dev.jsonc
 *.tfstate
 *.tfstate.*
 crash.log
-infra/azure/terraform/envs/dev/*.tf
+*.terraform.lock.hcl

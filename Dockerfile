@@ -2,14 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copia projeto
-COPY . /app
-
-# Instala dependências
+# Instala dependências primeiro (melhor cache)
+COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Variáveis de ambiente (overridable via Azure)
-ENV PYTHONUNBUFFERED=1
+# Copia só o código-fonte relevante
+COPY common/ inputs/ outputs/ scripts/ service/ configs/ ./
 
-# Entry point genérico – vamos sobrescrever o comando no job
+# Entrada padrão - vamos sobrescrever no docker run / k8s
 CMD ["bash", "-c", "echo 'Container up. Use command override to run pipelines.'"]

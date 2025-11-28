@@ -1,0 +1,94 @@
+name: dev-aks-helm
+
+on:
+#   push:
+#     branches: [ main ]
+#     paths:
+#       - "Dockerfile"
+#       - "service/**"
+#       - "helm/**"
+#       - "infra/azure/terraform/**"
+  workflow_dispatch: {}
+
+env:
+  ACR_NAME: itbdevacr             # Terraform must create this
+  AKS_RG: rg-itb-dev
+  AKS_NAME: aks-itb-dev
+  TF_WORKING_DIR: infra/azure/terraform/envs/dev
+  K8S_NAMESPACE: itb-dev
+  HELM_RELEASE: itb-dev
+
+jobs:
+  dev-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get ACR login server
+        id: acr
+        run: |
+          LOGIN_SERVER=$(az acr show -n $ACR_NAME --query loginServer -o tsv)
+          echo "login_server=$LOGIN_SERVER" >> $GITHUB_OUTPUT
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.acr.outputs.login_server }}/itb-bot:${{ github.sha }}
+            ${{ steps.acr.outputs.login_server }}/itb-bot:dev-latest
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false
+
+      - name: Terraform apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform apply -auto-approve -input=false
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group $AKS_RG \
+            --name $AKS_NAME \
+            --overwrite-existing
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl get ns $K8S_NAMESPACE || kubectl create ns $K8S_NAMESPACE
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm upgrade/install
+        run: |
+          helm upgrade --install $HELM_RELEASE ./helm/intelligent-trading-bot \
+            --namespace $K8S_NAMESPACE \
+            --set image.repository=${{ steps.acr.outputs.login_server }}/itb-bot \
+            --set image.tag=${{ github.sha }} \
+            --set env.ITB_CONFIG="/app/configs/btcusdt_1m_dev.jsonc" \
+            --set env.ENV="dev" \
+            --set secrets.BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY_DEV }}" \
+            --set secrets.BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET_DEV }}" \
+            --set secrets.TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN_DEV }}" \
+            --set secrets.TELEGRAM_CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID_DEV }}"
