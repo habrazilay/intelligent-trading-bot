@@ -16,6 +16,6 @@ resource "azurerm_storage_account" "sa" {
 
 resource "azurerm_storage_share" "share" {
   name                 = "data-itb-1m"
-  storage_account_name = azurerm_storage_account.sa.id
+  storage_account_name = azurerm_storage_account.sa.name
   quota                = 50  # GB
 }
