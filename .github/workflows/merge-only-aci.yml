@@ -11,11 +11,21 @@ on:
         description: "Image tag (just the tag, e.g. amd64-1764313462)"
         required: true
         default: "amd64-1764313462"
+  workflow_call:
+    inputs:
+      config_path:
+        description: "Path to JSONC config file"
+        required: true
+        type: string
+      image_tag:
+        description: "Image tag"
+        required: true
+        type: string
 
 env:
   ACR_LOGIN_SERVER: itbacr.azurecr.io
   ACR_REPOSITORY: itb-bot
-  DOCKER_IMAGE: itbacr.azurecr.io/itb-bot:${{ github.event.inputs.image_tag }}
+  DOCKER_IMAGE: itbacr.azurecr.io/itb-bot:${{ inputs.image_tag || github.event.inputs.image_tag }}
   AZURE_RESOURCE_GROUP: rg-itb-dev
   AZURE_CONTAINER_PREFIX: itb-bot
   AZURE_STORAGE_ACCOUNT: stitbdev
@@ -26,7 +36,7 @@ jobs:
   merge_only:
     runs-on: ubuntu-latest
     env:
-      CONFIG_PATH: ${{ github.event.inputs.config_path }}
+      CONFIG_PATH: ${{ inputs.config_path || github.event.inputs.config_path }}
     steps:
       - name: Azure Login
         uses: azure/login@v1
