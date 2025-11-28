@@ -62,7 +62,6 @@ jobs:
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --image "$DOCKER_IMAGE" \
             --os-type Linux \
-            --sku Dedicated \
             --registry-login-server "${{ env.ACR_LOGIN_SERVER }}" \
             --registry-username "${{ secrets.ACR_USERNAME }}" \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
@@ -125,7 +124,6 @@ jobs:
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --image "$DOCKER_IMAGE" \
             --os-type Linux \
-            --sku Dedicated \
             --registry-login-server "${{ env.ACR_LOGIN_SERVER }}" \
             --registry-username "${{ secrets.ACR_USERNAME }}" \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
@@ -197,7 +195,6 @@ jobs:
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --image "$DOCKER_IMAGE" \
             --os-type Linux \
-            --sku Dedicated \
             --registry-login-server "${{ env.ACR_LOGIN_SERVER }}" \
             --registry-username "${{ secrets.ACR_USERNAME }}" \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
@@ -262,7 +259,6 @@ jobs:
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --image "$DOCKER_IMAGE" \
             --os-type Linux \
-            --sku Dedicated \
             --registry-login-server "${{ env.ACR_LOGIN_SERVER }}" \
             --registry-username "${{ secrets.ACR_USERNAME }}" \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
