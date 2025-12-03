@@ -128,7 +128,7 @@
       "name":"lc",
       "algo":"lc",
       "params":{"is_scale":true},
-      "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":100}
+      "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":300}
     }
 
     // LightGBM – bom para tabular, não exige scaling

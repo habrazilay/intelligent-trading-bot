@@ -128,7 +128,7 @@
       "name":"lc",
       "algo":"lc",
       "params":{"is_scale":true},
-      "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":100}
+      "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":300}
     }
 
     // LightGBM – bom para tabular, não exige scaling
@@ -168,7 +168,7 @@
         "columns":"trade_score",
         "names":["buy_signal","sell_signal"],
         "parameters":{
-          "buy_signal_threshold":0.02,
+          "buy_signal_threshold":0.01,
           "sell_signal_threshold":-0.01
         }
       }
@@ -213,8 +213,8 @@
     "signal_generator":"threshold_rule",
     "buy_sell_equal":false,
     "grid": {
-    "buy_signal_threshold": [0.02, 0.025, 0.03, 0.035],
-    "sell_signal_threshold": [-0.02, -0.025, -0.03, -0.035]
+    "buy_signal_threshold": [0.01, 0.015, 0.02, 0.025],
+    "sell_signal_threshold": [-0.01, -0.015, -0.02, -0.025]
     }
   },
 
