@@ -1,3 +1,5 @@
 {
-    "chatgpt.openOnStartup": true
+    "chatgpt.openOnStartup": true,
+    "editor.defaultFormatter": "openai.chatgpt",
+    "github.copilot.chat.edits.suggestRelatedFilesForTests": false
 }

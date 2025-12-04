@@ -219,6 +219,7 @@ celerybeat.pid
 .env
 *.env.*
 .venv
+/itb-venv
 env/
 venv/
 ENV/
@@ -254,7 +255,6 @@ cython_debug/
 /DATA/
 /DATA_*/
 .DS_Store
-/my_tests
 
 # Terraform local cache and state
 .terraform/

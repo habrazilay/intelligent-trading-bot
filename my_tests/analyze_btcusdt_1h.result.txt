@@ -1,0 +1,117 @@
+(itb-venv) danielschmidt@Daniels-MacBook-Pro-2 intelligent-trading-bot % python analyze_btcusdt_1h.py \
+  --parquet DATA_ITB_1h/BTCUSDT/klines.parquet \
+  --days 365
+Lendo parquet de 1h: DATA_ITB_1h/BTCUSDT/klines.parquet
+
+Dimensão total do dataset 1h:
+  Linhas: 60251
+  Período: 2019-01-01 00:00:00+00:00  →  2025-11-17 22:00:00+00:00
+
+Recorte de 365 dias recentes:
+  Linhas: 8761
+  Período: 2024-11-17 22:00:00+00:00  →  2025-11-17 22:00:00+00:00
+
+================================================================================
+ANÁLISE DE VOLATILIDADE (ATR em % do preço)
+================================================================================
+
+ATR_14_pct (ultimos N dias):
+count    8748.000000
+mean        0.006362
+std         0.003300
+min         0.001205
+10%         0.003049
+25%         0.004111
+50%         0.005693
+75%         0.007671
+90%         0.010442
+max         0.025090
+
+ATR_30_pct (ultimos N dias):
+count    8732.000000
+mean        0.006354
+std         0.002927
+min         0.001417
+10%         0.003323
+25%         0.004348
+50%         0.005782
+75%         0.007536
+90%         0.009982
+max         0.021499
+
+================================================================================
+ANÁLISE DE RETORNOS FUTUROS (em %)
+================================================================================
+
+--- Horizonte: 6 candles (1h) ---
+  (~ 6 horas)
+count    8755.000000
+mean        0.000082
+std         0.011587
+min        -0.085277
+10%        -0.012289
+25%        -0.004824
+50%         0.000235
+75%         0.005437
+90%         0.012102
+max         0.108364
+  P(futuro >= +0.50%): 26.63% | P(futuro <= -0.50%): 24.39%
+  P(futuro >= +1.00%): 12.84% | P(futuro <= -1.00%): 12.98%
+  P(futuro >= +2.00%):  3.48% | P(futuro <= -2.00%):  4.43%
+  P(futuro >= +4.00%):  0.49% | P(futuro <= -4.00%):  0.53%
+
+--- Horizonte: 12 candles (1h) ---
+  (~ 12 horas)
+count    8749.000000
+mean        0.000170
+std         0.016214
+min        -0.109057
+10%        -0.018047
+25%        -0.007438
+50%         0.000323
+75%         0.008153
+90%         0.018000
+max         0.099998
+  P(futuro >= +0.50%): 33.65% | P(futuro <= -0.50%): 31.16%
+  P(futuro >= +1.00%): 20.92% | P(futuro <= -1.00%): 20.12%
+  P(futuro >= +2.00%):  8.32% | P(futuro <= -2.00%):  8.54%
+  P(futuro >= +4.00%):  1.28% | P(futuro <= -4.00%):  1.67%
+
+--- Horizonte: 24 candles (1h) ---
+  (~ 24 horas)
+count    8737.000000
+mean        0.000348
+std         0.022144
+min        -0.115217
+10%        -0.025100
+25%        -0.011252
+50%         0.000528
+75%         0.011980
+90%         0.025722
+max         0.104196
+  P(futuro >= +0.50%): 38.74% | P(futuro <= -0.50%): 36.05%
+  P(futuro >= +1.00%): 28.22% | P(futuro <= -1.00%): 26.89%
+  P(futuro >= +2.00%): 14.80% | P(futuro <= -2.00%): 14.38%
+  P(futuro >= +4.00%):  3.76% | P(futuro <= -4.00%):  3.61%
+
+--- Horizonte: 48 candles (1h) ---
+  (~ 48 horas)
+count    8713.000000
+mean        0.000646
+std         0.029736
+min        -0.117153
+10%        -0.035300
+25%        -0.016100
+50%         0.000893
+75%         0.018414
+90%         0.036460
+max         0.125454
+  P(futuro >= +0.50%): 43.07% | P(futuro <= -0.50%): 40.13%
+  P(futuro >= +1.00%): 35.90% | P(futuro <= -1.00%): 32.37%
+  P(futuro >= +2.00%): 23.17% | P(futuro <= -2.00%): 20.82%
+  P(futuro >= +4.00%):  7.76% | P(futuro <= -4.00%):  7.73%
+
+Análise concluída. Use esses números para calibrar:
+  - label_horizon (em candles de 1h: ex 12, 24, 48)
+  - thresholds dos labels (ex: 1%, 2%)
+  - buy_signal_threshold / sell_signal_threshold e grade do simulate_model
