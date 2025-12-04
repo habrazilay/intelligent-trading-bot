@@ -5,6 +5,7 @@ from tqdm import tqdm
 
 import numpy as np
 import pandas as pd
+import traceback
 
 from service.App import *
 from common.utils import *
@@ -65,12 +66,13 @@ def main(config_file):
             asyncio.run(output_feature_set(df, os, App.config, App.model_store))
         except Exception as e:
             log.error(
-                "Error in output function: %s. Generator: %s. Output config: %s",
-                e,
+                "Error in output function for generator=%s, output_config=%s: %s",
                 os.get("generator"),
                 os,
+                e,
             )
-            return
+            log.error("Traceback for output error:\n%s", traceback.format_exc())
+            # Do not return here; continue to next output set
 
     elapsed = datetime.now() - now
     print(f"Finished executing outputs in {str(elapsed).split('.')[0]}")

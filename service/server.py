@@ -7,6 +7,7 @@ import click
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from binance import Client
+import traceback
 
 from common.types import Venue
 from service.App import *
@@ -84,8 +85,15 @@ async def main_task():
         try:
             await output_feature_set(App.analyzer.df, os, App.config, App.model_store)
         except Exception as e:
-            log.error(f"Error in output function: {e}")
-            return
+            log.error(
+                "Error in output function for generator=%s, output_config=%s: %s",
+                os.get("generator"),
+                os,
+                e,
+            )
+            log.error("Traceback for output error:\n%s", traceback.format_exc())
+            # Do not abort the whole main task because of one output failure
+            continue
 
     return
 

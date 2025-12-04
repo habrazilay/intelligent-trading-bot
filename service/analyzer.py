@@ -171,7 +171,10 @@ class Analyzer:
         #
         # Merge multiple dfs in one df with prefixes and common regular time index
         #
-        df = merge_data_sources(data_sources)
+        time_column = self.config.get("time_column", "timestamp")
+        # prefer pandas_freq if available, fallback to freq
+        freq = self.config.get("pandas_freq", self.config.get("freq"))
+        df = merge_data_sources(data_sources, time_column, freq, self.config)
 
         #
         # Append to the main data frame (by overwriting existing overlap)

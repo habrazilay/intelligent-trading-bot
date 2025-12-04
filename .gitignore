@@ -254,6 +254,7 @@ cython_debug/
 /DATA/
 /DATA_*/
 .DS_Store
+/my_tests
 
 # Terraform local cache and state
 .terraform/

@@ -3,6 +3,7 @@ from typing import Union
 import json
 from datetime import datetime, date, timedelta
 import re
+import os
 
 import pandas as pd
 
@@ -68,143 +69,9 @@ class App:
 
     #
     # Constant configuration parameters
+    # At runtime, this will be fully replaced by the JSONC config file via load_config().
     #
-    config = {
-        # Venue 
-        "venue": "",
-        
-        # Binance
-        "api_key": "",
-        "api_secret": "",
-        
-        # MetaTrader5
-        "mt5_account_id": "",
-        "mt5_password": "",
-        "mt5_server": "",
-
-        # Telegram
-        "telegram_bot_token": "",  # Source address of messages
-        "telegram_chat_id": "",  # Destination address of messages
-
-        #
-        # Conventions for the file and column names
-        #
-        "merge_file_name": "data.csv",
-        "feature_file_name": "features.csv",
-        "matrix_file_name": "matrix.csv",
-        "predict_file_name": "predictions.csv",  # predict, predict-rolling
-        "signal_file_name": "signals.csv",
-        "signal_models_file_name": "signal_models",
-
-        "model_folder": "MODELS",
-
-        "time_column": "timestamp",
-
-        # File locations
-        "data_folder": "C:/DATA_ITB",  # Location for all source and generated data/models
-
-        # ==============================================
-        # === DOWNLOADER, MERGER and (online) READER ===
-
-        # Symbol determines sub-folder and used in other identifiers
-        "symbol": "BTCUSDT",  # BTCUSDT ETHUSDT ^gspc EURUSD
-
-        # This parameter determines time raster (granularity) for the data
-        # It is pandas frequency
-        "freq": "1min",
-
-        # This list is used for downloading and then merging data
-        # "folder" is symbol name for downloading. prefix will be added column names during merge
-        "data_sources": [],
-
-        # ==========================
-        # === FEATURE GENERATION ===
-
-        # What columns to pass to which feature generator and how to prefix its derived features
-        # Each executes one feature generation function applied to columns with the specified prefix
-        "feature_sets": [],
-
-        # ========================
-        # === LABEL GENERATION ===
-
-        "label_sets": [],
-
-        # ===========================
-        # === MODEL TRAIN/PREDICT ===
-        #     predict off-line and on-line
-
-        "label_horizon": 0,  # This number of tail rows will be excluded from model training
-        "train_length": 0,  # train set maximum size. algorithms may decrease this length
-
-        # List all features to be used for training/prediction by selecting them from the result of feature generation
-        # The list of features can be found in the output of the feature generation (but not all must be used)
-        # Currently the same feature set for all algorithms
-        "train_features": [],
-
-        # Labels to be used for training/prediction by all algorithms
-        # List of available labels can be found in the output of the label generation (but not all must be used)
-        "labels": [],
-
-        # Algorithms and their configurations to be used for training/prediction
-        "algorithms": [],
-
-        # ===========================
-        # ONLINE (PREDICTION) PARAMETERS
-        # Minimum history length required to compute derived features
-        "features_horizon": 10,
-
-        # ===============
-        # === SIGNALS ===
-
-        "signal_sets": [],
-
-        # =====================
-        # === NOTIFICATIONS ===
-
-        "score_notification_model": {},
-        "diagram_notification_model": {},
-
-        # ===============
-        # === TRADING ===
-        "trade_model": {
-            "no_trades_only_data_processing": False,  # in market or out of market processing is excluded (all below parameters ignored)
-            "test_order_before_submit": False,  # Send test submit to the server as part of validation
-            "simulate_order_execution": False,  # Instead of real orders, simulate their execution (immediate buy/sell market orders and use high price of klines for limit orders)
-
-            "percentage_used_for_trade": 99,  # in % to the available USDT quantity, that is, we will derive how much BTC to buy using this percentage
-            "limit_price_adjustment": 0.005,  # Limit price of orders will be better than the latest close price (0 means no change, positive - better for us, negative - worse for us)
-        },
-
-        "simulate_model": {},
-
-        # =====================
-        # === BINANCE TRADER ===
-        "base_asset": "",  # BTC ETH
-        "quote_asset": "",
-
-        # ==================
-        # === COLLECTORS ===
-        "collector": {
-            "folder": "DATA",
-            "flush_period": 300,  # seconds
-            "depth": {
-                "folder": "DEPTH",
-                "symbols": ["BTCUSDT", "ETHBTC", "ETHUSDT", "IOTAUSDT", "IOTABTC", "IOTAETH"],
-                "limit": 100,  # Legal values (depth): '5, 10, 20, 50, 100, 500, 1000, 5000' <100 weight=1
-                "freq": "1min",  # Pandas frequency
-            },
-            "stream": {
-                "folder": "STREAM",
-                # Stream formats:
-                # For kline channel: <symbol>@kline_<interval>, Event type: "e": "kline", Symbol: "s": "BNBBTC"
-                # For depth channel: <symbol>@depth<levels>[@100ms], Event type: NO, Symbol: NO
-                # btcusdt@ticker
-                "channels": ["kline_1m", "depth20"],  # kline_1m, depth20, depth5
-                "symbols": ["BTCUSDT", "ETHBTC", "ETHUSDT", "IOTAUSDT", "IOTABTC", "IOTAETH"],
-                # "BTCUSDT", "ETHBTC", "ETHUSDT", "IOTAUSDT", "IOTABTC", "IOTAETH"
-            }
-        },
-    }
+    config = {}
 
 
 def data_provider_problems_exist():
@@ -238,7 +105,16 @@ def load_config(config_file):
             conf_str = re.sub(r"//.*$", "", conf_str, flags=re.M)
 
             conf_json = json.loads(conf_str)
-            App.config.update(conf_json)
+            # Replace the in-memory config entirely with the JSON config file.
+            App.config = conf_json
+
+            # If API key/secret are not set in config, fall back to environment variables.
+            api_key_env = os.getenv("BINANCE_API_KEY")
+            api_secret_env = os.getenv("BINANCE_API_SECRET")
+            if api_key_env and not App.config.get("api_key"):
+                App.config["api_key"] = api_key_env
+            if api_secret_env and not App.config.get("api_secret"):
+                App.config["api_secret"] = api_secret_env
 
 
 if __name__ == "__main__":
