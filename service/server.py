@@ -274,9 +274,12 @@ def start_server(config_file):
 
     log.info(f"Finished initial data collection.")
 
-    # TODO: Only for binance output and if it has been defined
     # Initialize trade status (account, balances, orders etc.) in case we are going to really execute orders
-    if App.config.get("trade_model", {}).get("trader_binance"):
+    has_binance_output = any(
+        output_set.get("generator") == "trader_binance"
+        for output_set in App.config.get("output_sets", [])
+    )
+    if venue == Venue.BINANCE and has_binance_output and App.config.get("trade_model", {}).get("trader_binance"):
         try:
             App.loop.run_until_complete(trader_funcs['update_trade_status']())
         except Exception as e:
