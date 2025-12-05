@@ -166,7 +166,7 @@ def main(config_file, dry_run, log_level):
             gen_name,
             str(trained_items),
             str(t_elapsed).split(".")[0],
-        )
+        )       
 
     elapsed = datetime.now() - now
     log.info("✔ TREINO COMPLETO em %s", str(elapsed).split(".")[0])

@@ -104,9 +104,9 @@ def train_gb(df_X, df_y, model_config: dict):
         lgbm_params,
         train_set=lgbm.Dataset(X_train, y_train),
         num_boost_round=num_boost_round,
-        #valid_sets=[lgbm.Dataset(X_validate, y_validate)],
-        #early_stopping_rounds=int(num_boost_round / 5),
-        #verbose_eval=100,
+        valid_sets=[lgbm.Dataset(X_validate, y_validate)],
+        early_stopping_rounds=int(num_boost_round / 5),
+        verbose_eval=100,
     )
 
     return (model, scaler)
@@ -230,7 +230,7 @@ def train_nn(df_X, df_y, model_config: dict):
             ],
         )
 
-    #model.summary()
+    model.summary()
 
     # Default arguments for early stopping
     es_args = dict(

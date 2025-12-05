@@ -134,15 +134,22 @@
       "algo":"lc",
       "params":{"is_scale":true},
       "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":1000}
-    }
-
-    // LightGBM – bom para tabular, não exige scaling
+    },
+    // Random Forest
     // {
-    //   "name":"lgbm",
-    //   "algo":"lgbm",
+    //   "name":"rf",
+    //   "algo":"rf",
     //   "params":{},
-    //   "train":{"num_leaves":31,"learning_rate":0.05,"n_estimators":300,"max_depth":-1}
-    // }
+    //   "train":{"n_estimators":100,"max_depth":10,"min_samples_leaf":10,"max_features":"sqrt"}
+    // },
+
+    //LightGBM – bom para tabular, não exige scaling
+    {
+      "name":"lgbm",
+      "algo":"lgbm",
+      "params":{},
+      "train":{"num_leaves":31,"learning_rate":0.05,"n_estimators":300,"max_depth":-1}
+    }
   ],
 
   // === SINAIS ==============================================================

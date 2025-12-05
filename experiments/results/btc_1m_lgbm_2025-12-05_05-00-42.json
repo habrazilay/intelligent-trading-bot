@@ -1,0 +1,119 @@
+{
+  "dataset": "BTCUSDT_1m",
+  "matrix_path": "DATA_ITB_1m/BTCUSDT/matrix.csv",
+  "time_range": {
+    "start": "2025-06-07T00:44:00+00:00",
+    "end": "2025-12-04T00:44:00+00:00"
+  },
+  "n_rows": 259201,
+  "days": 180,
+  "has_lightgbm": true,
+  "labels": {
+    "high_05_60": {
+      "label": "high_05_60",
+      "model_type": "lgbm",
+      "n_train": 207360,
+      "n_val": 51841,
+      "metrics": {
+        "precision": 0.011627906976744186,
+        "recall": 0.0002349072116513977,
+        "f1": 0.00046051116739580933,
+        "support_pos": 4257,
+        "support_neg": 47584,
+        "support_total": 51841,
+        "time": {
+          "train_start": "2025-06-07T00:44:00+00:00",
+          "train_end": "2025-10-29T00:43:00+00:00",
+          "val_start": "2025-10-29T00:44:00+00:00",
+          "val_end": "2025-12-04T00:44:00+00:00"
+        }
+      },
+      "threshold_metrics": {
+        "0.3": {
+          "precision": 0.04631217838765009,
+          "recall": 0.006342494714587738,
+          "f1": 0.01115702479338843,
+          "support": "None"
+        },
+        "0.5": {
+          "precision": 0.011627906976744186,
+          "recall": 0.0002349072116513977,
+          "f1": 0.00046051116739580933,
+          "support": "None"
+        },
+        "0.7": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": "None"
+        }
+      },
+      "feature_cols": [
+        "close_SMA_5",
+        "close_SMA_10",
+        "close_SMA_20",
+        "close_SMA_60",
+        "close_RSI_14",
+        "close_LINEARREG_SLOPE_10",
+        "close_LINEARREG_SLOPE_20",
+        "close_LINEARREG_SLOPE_60",
+        "high_low_close_ATR_14",
+        "close_STDDEV_20",
+        "close_STDDEV_60"
+      ]
+    },
+    "low_05_60": {
+      "label": "low_05_60",
+      "model_type": "lgbm",
+      "n_train": 207360,
+      "n_val": 51841,
+      "metrics": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support_pos": 4851,
+        "support_neg": 46990,
+        "support_total": 51841,
+        "time": {
+          "train_start": "2025-06-07T00:44:00+00:00",
+          "train_end": "2025-10-29T00:43:00+00:00",
+          "val_start": "2025-10-29T00:44:00+00:00",
+          "val_end": "2025-12-04T00:44:00+00:00"
+        }
+      },
+      "threshold_metrics": {
+        "0.3": {
+          "precision": 0.10766961651917405,
+          "recall": 0.015048443619872192,
+          "f1": 0.026406221739916802,
+          "support": "None"
+        },
+        "0.5": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": "None"
+        },
+        "0.7": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": "None"
+        }
+      },
+      "feature_cols": [
+        "close_SMA_5",
+        "close_SMA_10",
+        "close_SMA_20",
+        "close_SMA_60",
+        "close_RSI_14",
+        "close_LINEARREG_SLOPE_10",
+        "close_LINEARREG_SLOPE_20",
+        "close_LINEARREG_SLOPE_60",
+        "high_low_close_ATR_14",
+        "close_STDDEV_20",
+        "close_STDDEV_60"
+      ]
+    }
+  }
+}

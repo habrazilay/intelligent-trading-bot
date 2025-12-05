@@ -1,5 +1,45 @@
 {
-    "chatgpt.openOnStartup": true,
-    "editor.defaultFormatter": "openai.chatgpt",
-    "github.copilot.chat.edits.suggestRelatedFilesForTests": false
+    // ===== Terminal =====
+
+    // Terminal SEMPRE no painel
+    "terminal.integrated.defaultLocation": "panel",
+
+    // Abas de terminal ligadas (útil p/ rodar 1m, 5m, logs, tf)
+    "terminal.integrated.tabs.enabled": true,
+
+    // Option (⌥) funcionando como Alt/Meta no terminal
+    "terminal.integrated.macOptionIsMeta": true,
+
+    // NÃO ignore nenhum shell real
+    "terminal.integrated.ignoreProcessNames": [],
+
+    // ===== Python =====
+
+    // Apontar sempre pro seu venv principal
+    "python.defaultInterpreterPath": "/Users/danielschmidt/itb-venv/bin/python",
+
+    // VS Code ativa o venv automaticamente (recomendado)
+    "python.terminal.activateEnvironment": true,
+
+    // ===== Editor =====
+
+    // Abrir arquivos grandes sem warnings
+    "editor.largeFileOptimizations": false,
+
+    // ===== Git =====
+
+    "git.autofetch": true,
+    "git.enableSmartCommit": true,
+    "git.openRepositoryInParentFolders": "never",
+
+    // ===== VS Code Experience =====
+
+    // Copiar texto selecionado automaticamente
+    "terminal.integrated.copyOnSelection": true,
+
+    // Extensões recomendadas
+    "extensions.ignoreRecommendations": false,
+
+    // ChatGPT
+    "chatgpt.openOnStartup": true
 }
