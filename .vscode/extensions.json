@@ -1,5 +1,6 @@
 {
     "recommendations": [
-        "openai.openai-vscode"
+        "openai.openai-vscode",
+        "ms-azuretools.vscode-azurestorage"
     ]
 }

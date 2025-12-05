@@ -12,3 +12,13 @@ make dev-5m
 
 # Rodar análise 1m (o analyze_btcusdt_1m.py) em ACI
 make analyze-1m
+criar um Makefile com alvos tipo:
+make tf-dev-plan
+
+make tf-dev-apply
+make upload-1m
+make upload-5m
+
+make upload-1m
+make upload-5m
+make upload-1h
