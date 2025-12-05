@@ -1,72 +1,45 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ============================
-# Config padrão (pode sobrescrever via env)
-# ============================
-STORAGE_ACCOUNT="${STORAGE_ACCOUNT:-stitbdev}"
-SHARE_1M="${SHARE_1M:-data-itb-1m}"
+# ==============================
+# Config
+# ==============================
+ACCOUNT="${AZURE_STORAGE_ACCOUNT:-stitbdev}"
+SHARE="data-itb-1m"
+PAIR="BTCUSDT"
 
-# Versão vem do 1º argumento ou do env VERSION ou data de hoje
-VERSION="${1:-${VERSION:-$(date +v%Y-%m-%d)}}"
+# Versão vem do primeiro argumento ou do env VERSION ou data
+VERSION="${1:-${VERSION:-v$(date +%Y-%m-%d)}}"
 
 LOCAL_DIR="DATA_ITB_1m/BTCUSDT"
-REMOTE_DIR="BTCUSDT/${VERSION}"
+REMOTE_PREFIX="$PAIR/$VERSION"
 
 echo "==> Upload BTCUSDT 1m"
-echo "    Storage account : ${STORAGE_ACCOUNT}"
-echo "    File share      : ${SHARE_1M}"
-echo "    Versão          : ${VERSION}"
-echo "    Local dir       : ${LOCAL_DIR}"
-echo "    Remote dir      : ${REMOTE_DIR}"
+echo "    Storage account : $ACCOUNT"
+echo "    File share      : $SHARE"
+echo "    Versão          : $VERSION"
+echo "    Local dir       : $LOCAL_DIR"
+echo "    Remote prefix   : $REMOTE_PREFIX"
 echo
 
-# Garantir que o arquivo existe
-if [[ ! -f "${LOCAL_DIR}/klines.parquet" ]]; then
-  echo "ERRO: ${LOCAL_DIR}/klines.parquet não encontrado."
+if [[ ! -d "$LOCAL_DIR" ]]; then
+  echo "ERRO: diretório $LOCAL_DIR não existe."
   exit 1
 fi
 
-# Requer: az login + az account set já feitos
-echo "-> Enviando klines.parquet ..."
-az storage file upload \
-  --auth-mode login \
-  --enable-file-backup-request-intent true \
-  --account-name "${STORAGE_ACCOUNT}" \
-  --share-name "${SHARE_1M}" \
-  --source "${LOCAL_DIR}/klines.parquet" \
-  --path "${REMOTE_DIR}/klines.parquet"
+if [[ -z "${AZURE_STORAGE_ACCOUNT:-}" || -z "${AZURE_STORAGE_KEY:-}" ]]; then
+  echo "ERRO: AZURE_STORAGE_ACCOUNT e/ou AZURE_STORAGE_KEY não definidos."
+  echo "      export AZURE_STORAGE_ACCOUNT=stitbdev"
+  echo "      export AZURE_STORAGE_KEY='...'"
+  exit 1
+fi
 
-echo "OK: Upload concluído."
+# Upload em batch de TUDO que está em DATA_ITB_1m/BTCUSDT
+echo "-> Enviando conteúdo de $LOCAL_DIR para $SHARE/$REMOTE_PREFIX ..."
+az storage file upload-batch \
+  --account-name "$ACCOUNT" \
+  --destination "$SHARE" \
+  --destination-path "$REMOTE_PREFIX" \
+  --source "$LOCAL_DIR"
 
-# klines.parquet
-az storage file upload \
-  --share-name data-itb-1m \
-  --path BTCUSDT/$VERSION/klines.parquet \
-  --source DATA_ITB_1m/BTCUSDT/klines.parquet
-
-# data / features / matrix / predictions / signals / models (se quiser)
-az storage file upload \
-  --share-name data-itb-1m \
-  --path BTCUSDT/$VERSION/data.csv \
-  --source DATA_ITB_1m/BTCUSDT/data.csv
-
-az storage file upload \
-  --share-name data-itb-1m \
-  --path BTCUSDT/$VERSION/features.csv \
-  --source DATA_ITB_1m/BTCUSDT/features.csv
-
-az storage file upload \
-  --share-name data-itb-1m \
-  --path BTCUSDT/$VERSION/matrix.csv \
-  --source DATA_ITB_1m/BTCUSDT/matrix.csv
-
-az storage file upload \
-  --share-name data-itb-1m \
-  --path BTCUSDT/$VERSION/predictions.csv \
-  --source DATA_ITB_1m/BTCUSDT/predictions.csv
-
-az storage file upload \
-  --share-name data-itb-1m \
-  --path BTCUSDT/$VERSION/signals.csv \
-  --source DATA_ITB_1m/BTCUSDT/signals.csv
+echo "OK: Upload BTCUSDT 1m concluído."
