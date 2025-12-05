@@ -1,4 +1,3 @@
-
 from decimal import *
 import asyncio
 from dotenv import load_dotenv
@@ -24,38 +23,8 @@ from outputs.notifier_scores import *
 from outputs.notifier_diagram import *
 from outputs import get_trader_functions
 import logging
+import os
 
-def start_server(config_file):
-    # 1) Carrega config
-    load_config(config_file)  # isso popula App.config
-
-    # 2) Cria client da Binance a partir de config ou env
-    from binance.client import Client
-
-    api_key = App.config.get("api_key") or os.getenv("BINANCE_API_KEY")
-    ...
-    App.client = Client(api_key, api_secret)
-
-    if not api_key or not api_secret:
-        log.error("BINANCE_API_KEY / BINANCE_API_SECRET não foram encontrados. Verifique seu .env ou config.")
-        return
-
-    # 3) Continua: scheduler, collector, analyzer, trader...
-
-log = logging.getLogger('server')
-
-logging.basicConfig(
-    filename="server.log",
-    level=logging.DEBUG,
-    #format = "%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s",
-    format = "%(asctime)s %(levelname)s %(message)s",
-    #datefmt = '%Y-%m-%d %H:%M:%S',
-),
-# Get the collector functions based on the collector type
-
-#
-# Main procedure
-#
 async def main_task():
     #
     # 1. Execute input adapters to receive new data from data source(s)
@@ -114,7 +83,7 @@ async def main_task():
 
 async def main_collector_task():
     """
-    Retrieve raw data from venue-specific data sources and append to the main data frame
+    Retrieve raw data from venue-specific data sources and append to the main data frame <--
     """
     venue = App.config.get("venue")
     venue = Venue(venue)
@@ -126,17 +95,6 @@ async def main_collector_task():
     now_ts = now_timestamp()
 
     log.info(f"===> Start collector task. Timestamp {now_ts}. Interval [{start_ts},{end_ts}].")
-    log.info("=== START LIVE SESSION ===")
-    log.info(f"Config file     : {config_path}")
-    log.info(f"Symbol          : {App.config['symbol']}")
-    log.info(f"Freq (freq)     : {App.config['freq']}")
-    log.info(f"Label horizon   : {App.config.get('label_horizon')}")
-    log.info(f"Features horizon: {App.config.get('features_horizon')}")
-    log.info(f"Train length    : {App.config.get('train_length')}")
-    log.info(f"Algorithms      : {[a['name'] for a in App.config.get('algorithms', [])]}")
-    log.info(f"Trade model     : {App.config.get('trade_model')}")
-    log.info(f"ENABLE_LIVE_TRADING={os.getenv('ENABLE_LIVE_TRADING')}")
-    log.info("============================================")
 
     #
     # 1. Check server state (if necessary)
@@ -218,16 +176,19 @@ def start_server(config_file):
     #
     if venue == Venue.BINANCE:
         client_args = App.config.get("client_args", {})
-        # First, try config; fallback to environment variables loaded by dotenv
+        # Prefer keys from config; fallback to environment variables loaded by dotenv
         api_key = App.config.get("api_key") or os.getenv("BINANCE_API_KEY")
         api_secret = App.config.get("api_secret") or os.getenv("BINANCE_API_SECRET")
 
         if not api_key or not api_secret:
-            log.error("BINANCE_API_KEY / BINANCE_API_SECRET não foram encontrados. Verifique seu .env ou o arquivo de configuração.")
+            log.error(
+                "BINANCE_API_KEY / BINANCE_API_SECRET não foram encontrados. "
+                "Verifique seu .env ou o arquivo de configuração."
+            )
             return
 
-        client_args["apiKey"] = api_key
-        client_args["apiSecret"] = api_secret
+        client_args["api_key"] = api_key
+        client_args["api_secret"] = api_secret
 
         try:
             App.client = Client(**client_args)
@@ -274,24 +235,21 @@ def start_server(config_file):
 
     log.info(f"Finished initial data collection.")
 
+    # TODO: Only for binance output and if it has been defined
     # Initialize trade status (account, balances, orders etc.) in case we are going to really execute orders
-    has_binance_output = any(
-        output_set.get("generator") == "trader_binance"
-        for output_set in App.config.get("output_sets", [])
-    )
-    if venue == Venue.BINANCE and has_binance_output and App.config.get("trade_model", {}).get("trader_binance"):
+    if App.config.get("trade_model", {}).get("trader_binance") and os.getenv("ENABLE_LIVE_TRADING", "false").lower() in ("1", "true", "yes"): 
         try:
             App.loop.run_until_complete(trader_funcs['update_trade_status']())
         except Exception as e:
-            log.error(f"Problems trade status sync. {e}")
+            log.error(f"Problems during trade status sync. {e}")
 
         if data_provider_problems_exist():
-            log.error(f"Problems trade status sync.")
+            log.error("Problems during trade status sync.")
             return
 
-        log.info(f"Finished trade status sync (account, balances etc.)")
-        log.info(f"Balance: {App.config['base_asset']} = {str(App.account_info.base_quantity)}")
-        log.info(f"Balance: {App.config['quote_asset']} = {str(App.account_info.quote_quantity)}")
+        log.info("Finished trade status sync (account, balances etc.)")
+        log.info("Balance: %s = %s", App.config.get('base_asset'), str(App.account_info.base_quantity))
+        log.info("Balance: %s = %s", App.config.get('quote_asset'), str(App.account_info.quote_quantity))
 
     #
     # Register scheduler
@@ -337,10 +295,6 @@ def start_server(config_file):
         # if loop.stop() doesn't immediately halt everything.
         App.loop.close()
         log.info(f"Event loop closed.")
-        # Shutdown MT5 connection if it was initialized
-        if venue == Venue.MT5:
-            mt5.shutdown()
-            log.info("MT5 connection shutdown.")
 
     return 0
 
