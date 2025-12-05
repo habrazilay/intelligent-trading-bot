@@ -20,19 +20,19 @@ resource "azurerm_storage_account" "sa" {
 }
 
 resource "azurerm_storage_share" "share" {    # 1m - já existe
-  name                 = "data-itb-1m"
-  storage_account_name = azurerm_storage_account.sa.name
-  quota                = 100
+  name               = "data-itb-1m"
+  storage_account_id = azurerm_storage_account.sa.id
+  quota              = 100
 }
 
 resource "azurerm_storage_share" "share_5m" { # novo
-  name                 = "data-itb-5m"
-  storage_account_name = azurerm_storage_account.sa.name
-  quota                = 100
+  name               = "data-itb-5m"
+  storage_account_id = azurerm_storage_account.sa.id
+  quota              = 100
 }
 
 resource "azurerm_storage_share" "share_1h" { # novo
-  name                 = "data-itb-1h"
-  storage_account_name = azurerm_storage_account.sa.name
-  quota                = 100
+  name               = "data-itb-1h"
+  storage_account_id = azurerm_storage_account.sa.id
+  quota              = 100
 }
