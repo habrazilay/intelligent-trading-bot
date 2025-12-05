@@ -1,6 +1,8 @@
 
 from decimal import *
 import asyncio
+from dotenv import load_dotenv
+load_dotenv()
 
 import click
 
@@ -21,9 +23,24 @@ from outputs.notifier_trades import *
 from outputs.notifier_scores import *
 from outputs.notifier_diagram import *
 from outputs import get_trader_functions
-
-
 import logging
+
+def start_server(config_file):
+    # 1) Carrega config
+    load_config(config_file)  # isso popula App.config
+
+    # 2) Cria client da Binance a partir de config ou env
+    from binance.client import Client
+
+    api_key = App.config.get("api_key") or os.getenv("BINANCE_API_KEY")
+    ...
+    App.client = Client(api_key, api_secret)
+
+    if not api_key or not api_secret:
+        log.error("BINANCE_API_KEY / BINANCE_API_SECRET não foram encontrados. Verifique seu .env ou config.")
+        return
+
+    # 3) Continua: scheduler, collector, analyzer, trader...
 
 log = logging.getLogger('server')
 
@@ -33,16 +50,13 @@ logging.basicConfig(
     #format = "%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s",
     format = "%(asctime)s %(levelname)s %(message)s",
     #datefmt = '%Y-%m-%d %H:%M:%S',
-)
-
+),
 # Get the collector functions based on the collector type
 
 #
 # Main procedure
 #
 async def main_task():
-    """This task will be executed regularly according to the schedule"""
-
     #
     # 1. Execute input adapters to receive new data from data source(s)
     #
@@ -112,6 +126,17 @@ async def main_collector_task():
     now_ts = now_timestamp()
 
     log.info(f"===> Start collector task. Timestamp {now_ts}. Interval [{start_ts},{end_ts}].")
+    log.info("=== START LIVE SESSION ===")
+    log.info(f"Config file     : {config_path}")
+    log.info(f"Symbol          : {App.config['symbol']}")
+    log.info(f"Freq (freq)     : {App.config['freq']}")
+    log.info(f"Label horizon   : {App.config.get('label_horizon')}")
+    log.info(f"Features horizon: {App.config.get('features_horizon')}")
+    log.info(f"Train length    : {App.config.get('train_length')}")
+    log.info(f"Algorithms      : {[a['name'] for a in App.config.get('algorithms', [])]}")
+    log.info(f"Trade model     : {App.config.get('trade_model')}")
+    log.info(f"ENABLE_LIVE_TRADING={os.getenv('ENABLE_LIVE_TRADING')}")
+    log.info("============================================")
 
     #
     # 1. Check server state (if necessary)
