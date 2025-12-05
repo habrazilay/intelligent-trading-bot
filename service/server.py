@@ -173,6 +173,22 @@ async def main_collector_task():
 def start_server(config_file):
 
     load_config(config_file)
+    # Run in predict-only mode when using the server
+    App.config["train"] = False
+    # Save config file path for reference
+    App.config["config_file"] = config_file
+
+    log.info("=== START LIVE SESSION ===")
+    log.info("Config file     : %s", config_file)
+    log.info("Symbol          : %s", App.config.get('symbol'))
+    log.info("Freq (freq)     : %s", App.config.get('freq'))
+    log.info("Label horizon   : %s", App.config.get('label_horizon'))
+    log.info("Features horizon: %s", App.config.get('features_horizon'))
+    log.info("Train length    : %s", App.config.get('train_length'))
+    log.info("Algorithms      : %s", [a.get('name') for a in App.config.get('algorithms', [])])
+    log.info("Trade model     : %s", App.config.get('trade_model'))
+    log.info("ENABLE_LIVE_TRADING=%s", os.getenv('ENABLE_LIVE_TRADING'))
+    log.info("========================================")
 
     App.config["train"] = False  # Server does not train - it only predicts therefore disable train mode
 
@@ -202,19 +218,22 @@ def start_server(config_file):
     #
     if venue == Venue.BINANCE:
         client_args = App.config.get("client_args", {})
-        if App.config.get("api_key"):
-            client_args["api_key"] = App.config.get("api_key")
-        if App.config.get("api_secret"):
-            client_args["api_secret"] = App.config.get("api_secret")
-        App.client = Client(**client_args)
+        # First, try config; fallback to environment variables loaded by dotenv
+        api_key = App.config.get("api_key") or os.getenv("BINANCE_API_KEY")
+        api_secret = App.config.get("api_secret") or os.getenv("BINANCE_API_SECRET")
 
-    if venue == Venue.MT5:
-        from service.mt5 import connect_mt5
-        authorized = connect_mt5(mt5_account_id=int(App.config.get("mt5_account_id")), mt5_password=str(App.config.get("mt5_password")), mt5_server=str(App.config.get("mt5_server")))
-        if not authorized:
-            log.error(f"Failed to connect to MT5. Check credentials and server details.")
+        if not api_key or not api_secret:
+            log.error("BINANCE_API_KEY / BINANCE_API_SECRET não foram encontrados. Verifique seu .env ou o arquivo de configuração.")
             return
-        App.client = mt5  
+
+        client_args["apiKey"] = api_key
+        client_args["apiSecret"] = api_secret
+
+        try:
+            App.client = Client(**client_args)
+        except Exception as e:
+            log.error("Falha ao inicializar Binance Client: %s", e)
+            return
 
     App.model_store = ModelStore(App.config)
     App.model_store.load_models()
