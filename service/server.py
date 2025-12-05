@@ -25,37 +25,6 @@ from outputs.notifier_diagram import *
 from outputs import get_trader_functions
 import logging
 
-def start_server(config_file):
-    # 1) Carrega config
-    load_config(config_file)  # isso popula App.config
-
-    # 2) Cria client da Binance a partir de config ou env
-    from binance.client import Client
-
-    api_key = App.config.get("api_key") or os.getenv("BINANCE_API_KEY")
-    ...
-    App.client = Client(api_key, api_secret)
-
-    if not api_key or not api_secret:
-        log.error("BINANCE_API_KEY / BINANCE_API_SECRET não foram encontrados. Verifique seu .env ou config.")
-        return
-
-    # 3) Continua: scheduler, collector, analyzer, trader...
-
-log = logging.getLogger('server')
-
-logging.basicConfig(
-    filename="server.log",
-    level=logging.DEBUG,
-    #format = "%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s",
-    format = "%(asctime)s %(levelname)s %(message)s",
-    #datefmt = '%Y-%m-%d %H:%M:%S',
-),
-# Get the collector functions based on the collector type
-
-#
-# Main procedure
-#
 async def main_task():
     #
     # 1. Execute input adapters to receive new data from data source(s)
@@ -127,7 +96,6 @@ async def main_collector_task():
 
     log.info(f"===> Start collector task. Timestamp {now_ts}. Interval [{start_ts},{end_ts}].")
     log.info("=== START LIVE SESSION ===")
-    log.info(f"Config file     : {config_path}")
     log.info(f"Symbol          : {App.config['symbol']}")
     log.info(f"Freq (freq)     : {App.config['freq']}")
     log.info(f"Label horizon   : {App.config.get('label_horizon')}")
@@ -334,10 +302,6 @@ def start_server(config_file):
         # if loop.stop() doesn't immediately halt everything.
         App.loop.close()
         log.info(f"Event loop closed.")
-        # Shutdown MT5 connection if it was initialized
-        if venue == Venue.MT5:
-            mt5.shutdown()
-            log.info("MT5 connection shutdown.")
 
     return 0
 
