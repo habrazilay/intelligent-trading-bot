@@ -126,6 +126,12 @@
     // Logistic Regression (baseline)
     {
       "name":"lc",
+    },
+    {
+      "name":"lgbm",
+      "algo":"lgbm",
+      "params":{},
+      "train":{"num_leaves":31,"learning_rate":0.05,"n_estimators":500,"max_depth":6}
       "algo":"lc",
       "params":{"is_scale":true},
       "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":300}
