@@ -5,7 +5,7 @@
 # Usage: make <target>
 # =============================================================================
 
-.PHONY: help setup setup-azure setup-gcp docker-build docker-push \
+.PHONY: help setup setup-azure setup-gcp setup-project docker-build docker-push \
         download train predict pipeline clean validate-configs \
         infra-dev-apply image-dev dev-1m dev-5m analyze-1m \
         upload-1m upload-5m upload-1h staging-1m staging-5m
@@ -20,6 +20,7 @@ help:
 	@echo "    make setup            - Full setup (deps + validate)"
 	@echo "    make setup-azure      - Setup Azure infrastructure"
 	@echo "    make setup-gcp        - Setup GCP infrastructure"
+	@echo "    make setup-project    - Setup GitHub Project + labels"
 	@echo "    make infra-dev-apply  - Apply Terraform in dev"
 	@echo ""
 	@echo "  Docker:"
@@ -101,6 +102,10 @@ setup-gcp:
 infra-dev-apply:
 	@echo ">> terraform apply em infra/azure/terraform/envs/dev"
 	cd infra/azure/terraform/envs/dev && terraform apply
+
+setup-project:
+	@echo ">> Setting up GitHub Project, labels, and sample issues"
+	./scripts/setup-github-project.sh
 
 # =============================================================================
 # Docker

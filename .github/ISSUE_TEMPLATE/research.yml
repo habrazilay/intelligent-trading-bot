@@ -1,0 +1,87 @@
+name: "🔬 R&D / ML Experiment"
+description: "Research, ML experiments, data analysis, hypothesis testing"
+labels: ["research", "ml", "experiment"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## R&D / ML Experiment
+        Research tasks, ML experiments, data analysis.
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      options:
+        - ML Model Experiment
+        - Feature Engineering
+        - Data Analysis
+        - Hyperparameter Tuning
+        - Strategy Research
+        - Backtesting
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothesis
+      description: What are you trying to prove/disprove?
+      placeholder: "I believe that..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: approach
+    attributes:
+      label: Approach
+      description: How will you test this?
+      placeholder: |
+        1. Collect data...
+        2. Train model with...
+        3. Compare metrics...
+
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Success Metrics
+      description: How will you measure success?
+      placeholder: |
+        - Accuracy > 60%
+        - Sharpe ratio > 1.5
+        - Drawdown < 10%
+
+  - type: dropdown
+    id: symbol
+    attributes:
+      label: Symbol(s)
+      options:
+        - BTCUSDT
+        - ETHUSDT
+        - BNBUSDT
+        - SOLUSDT
+        - XRPUSDT
+        - Multiple
+        - All
+
+  - type: dropdown
+    id: timeframe
+    attributes:
+      label: Timeframe
+      options:
+        - 1m
+        - 5m
+        - 1h
+        - Multiple
+
+  - type: textarea
+    id: results
+    attributes:
+      label: Results (fill after experiment)
+      description: Document your findings
+      placeholder: |
+        ## Results
+        - Accuracy: X%
+        - Conclusion: ...
+        - Next steps: ...
