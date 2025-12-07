@@ -29,6 +29,14 @@ async def send_diagram(df, model: dict, config: dict, model_store: ModelStore):
     freq = config.get("freq")
     time_column = config["time_column"]
 
+    # Normalize model: if a list of models is passed, use the first one
+    if isinstance(model, list):
+        if not model:
+            log.error("notifier_diagram received an empty model list; skipping.")
+            return
+        log.warning("notifier_diagram received a list for model; using the first element.")
+        model = model[0]   
+
     # Ensure that timestamp is in index. It is needed for visualization
     if not ptypes.is_datetime64_any_dtype(df.index):  # Alternatively df.index.inferred_type == "datetime64"
         if time_column in df.columns:

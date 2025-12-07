@@ -1,206 +1,362 @@
-# Infraestrutura Azure - Intelligent Trading Bot
+# INFRA.md - Infraestrutura do Projeto Intelligent Trading Bot
 
 > **Autor:** Habrazilay
 > **Role:** Senior DevOps Engineer
-> **Implementação:** 100% autoral - do zero ao deploy em produção
+> **Implementacao:** 100% autoral - do zero ao deploy em producao
+
+Documento oficial da infraestrutura do projeto.
+Mantido no branch dev.
+Objetivo: garantir reprodutibilidade, previsibilidade e continuidade operacional.
 
 ---
 
-## Resumo Executivo
+## 1. Arquitetura Geral
 
-Este documento descreve a infraestrutura cloud-native que **projetei e implementei do zero** para migrar o Intelligent Trading Bot de uma execução local para a **Microsoft Azure**.
+A infraestrutura atual opera no modelo:
 
-O projeto original era executado manualmente em máquina local. Eu arquitetei e implementei toda a camada de infraestrutura, CI/CD e automação.
+```
+Local Dev -> Azure Dev (ACI + Storage) -> Staging Shadow Mode -> Futuro Prod Live Trading
+```
+
+A plataforma usa:
+- Azure Storage Account para datasets versionados (Parquet, CSV, modelos).
+- Azure Container Registry (ACR) para imagens Docker do bot e pipelines.
+- Azure Container Instances (ACI) para rodar pipelines offline (treino, merge, labels, predict).
+- Azure Key Vault para gestao segura de secrets (Binance API keys).
+- Recovery Services Vault para backup diario dos dados criticos.
+- Terraform para provisionamento da infraestrutura base.
+- Terragrunt para configuracao DRY multi-cloud (Azure + GCP).
 
 ---
 
-## O Que Eu Implementei
+## 2. Recursos Azure
 
-### 1. Infrastructure as Code (Terraform)
+### 2.1 Resource Group (RG)
 
-Criei toda a estrutura Terraform para provisionamento automatizado:
-
-```
-infra/azure/terraform/envs/dev/
-├── main.tf          # Recursos principais (RG, Storage, File Share)
-├── variables.tf     # Variáveis parametrizáveis
-├── providers.tf     # Configuração do provider Azure
-├── outputs.tf       # Outputs para integração
-└── terraform.tfvars # Valores do ambiente dev
-```
-
-**Recursos provisionados:**
-
-| Recurso | Nome | Especificação |
-|---------|------|---------------|
-| Resource Group | `rg-itb-dev` | Agrupamento lógico |
-| Storage Account | `stitbdev` | Standard LRS, TLS 1.2 |
-| File Share | `data-itb-1m` | 50 GB persistente |
-
-### 2. Containerização (Docker)
-
-Criei o `Dockerfile` otimizado para o projeto:
-
-- **Base image:** Python 3.11-slim (menor footprint)
-- **Multi-stage build ready:** Preparado para otimização futura
-- **Layer caching:** Requirements primeiro para cache eficiente
-- **Security:** Remoção de arquivos que conflitam com stdlib
-
-### 3. CI/CD Pipeline (GitHub Actions)
-
-Implementei **9 workflows** de automação:
-
-| Workflow | Função | Tipo |
-|----------|--------|------|
-| `build-push-docker-image.yml` | Build e push para ACR | Trigger: push |
-| `merge-only-aci.yml` | Merge + Features | Reusable workflow |
-| `labels_new-only-aci.yml` | Geração de labels | Reusable workflow |
-| `train-only-aci.yml` | Treinamento ML | Reusable workflow |
-| `predict-signals-only-aci.yml` | Predição + Sinais | Reusable workflow |
-| `dev-aci-pipeline-1m.yml` | **Pipeline completo orquestrado** | Orchestrator |
-| `run-pipeline-aci-single.yml` | Pipeline em container único | Alternativo |
-| `azure-functions-app-python.yml` | Deploy Azure Functions | Legacy |
-| `dev-aks-helm.yml` | Deploy Kubernetes (AKS) | Futuro |
-
-**Arquitetura do Pipeline:**
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    dev-aci-pipeline-1m.yml                      │
-│                      (Orchestrator)                             │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-         ┌────────────────────┼────────────────────┐
-         ▼                    ▼                    ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│ merge-only-aci  │→ │ labels-only-aci │→ │ train-only-aci  │
-│                 │  │                 │  │                 │
-│ • merge_new     │  │ • labels_new    │  │ • train         │
-│ • features_new  │  │                 │  │                 │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │ predict-signals │
-                    │                 │
-                    │ • predict       │
-                    │ • signals       │
-                    └─────────────────┘
-```
-
-### 4. Azure Container Instances (ACI)
-
-Configurei execução serverless com:
-
-- **CPU:** 1 core por job
-- **Memória:** 2 GB por job
-- **Restart Policy:** Never (jobs efêmeros)
-- **Storage Mount:** Azure File Share em `/app/DATA_ITB_1m`
-- **Registry:** Azure Container Registry (ACR) privado
-
-### 5. Helm Charts (Kubernetes-ready)
-
-Preparei charts Helm para futura migração AKS:
-
-```
-helm/intelligent-trading-bot/
-├── Chart.yaml
-├── values.yaml
-└── templates/
-    ├── deployment.yaml
-    ├── service.yaml
-    ├── configmap.yaml
-    └── secret-env.yaml
-```
-
-### 6. Refatoração de Scripts
-
-Refatorei os scripts de ML para cloud:
-
-| Script Original | Novo Script | Melhorias |
-|-----------------|-------------|-----------|
-| `merge.py` | `merge_new.py` | Logging estruturado, Parquet |
-| `features.py` | `features_new.py` | Config-driven, progress bar |
-| `labels.py` | `labels_new.py` | Incremental processing |
-
-### 7. Secrets Management
-
-Implementei gestão segura de credenciais:
-
-- **GitHub Secrets** para CI/CD
-- **Azure File Share** com chave segura
-- **ACR** com autenticação via secrets
-- `.env` no `.gitignore` (nunca commitado)
+**Nome:** `rg-itb-dev`
+**Funcao:** Agrupar todos os recursos do ambiente de desenvolvimento e staging.
 
 ---
 
-## Próximas Implementações
+### 2.2 Storage Account
 
-### 1. Azure Key Vault (Em desenvolvimento)
+**Nome:** `stitbdev`
+**Tipo:** StorageV2
+**Localizacao:** eastus
 
-Migração de GitHub Secrets para Azure Key Vault:
+**Usos:**
+- Armazenamento de datasets versionados (1m, 5m, 1h).
+- Armazenamento dos modelos treinados.
+- Armazenamento de sinais, matrizes e features.
+- Fonte de dados para pipelines de treino em ACI.
 
-```hcl
-# A ser implementado
-resource "azurerm_key_vault" "kv" {
-  name                = "kv-itb-dev"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  sku_name            = "standard"
-  tenant_id           = data.azurerm_client_config.current.tenant_id
-}
+**Acesso:**
+- Chave primaria habilitada
+- Public Network Access: Enabled
+- TLS 1.2
 
-resource "azurerm_key_vault_secret" "binance_api_key" {
-  name         = "binance-api-key"
-  value        = var.binance_api_key
-  key_vault_id = azurerm_key_vault.kv.id
-}
+---
+
+### 2.3 File Shares
+
+Estrutura atual:
+
+| File share      | Proposito                     |
+|-----------------|-------------------------------|
+| data-itb-1m     | Dataset BTCUSDT 1m            |
+| data-itb-5m     | Dataset BTCUSDT 5m            |
+| data-itb-1h     | Dataset BTCUSDT 1h            |
+
+Padrao interno:
+
+```
+<share-name>/
+  BTCUSDT/
+    vYYYY-MM-DD/
+      klines.parquet
+      features.csv
+      matrix.csv
+      predictions.csv
+      predictions.txt
+      signals.csv
+      signal_models.txt
+      Archive.zip
+      MODELS/
+        *.pickle
+        *.scaler
 ```
 
-**Benefícios:**
-- Rotação automática de secrets
+---
+
+### 2.4 Azure Container Registry (ACR)
+
+**Nome:** `itbacr`
+**Login server:** `itbacr.azurecr.io`
+**SKU:** Basic
+**Admin user:** Enabled
+
+**Usos:**
+- Armazenar imagens Docker para:
+  - Pipelines dev
+  - Merge/Labels/Predict
+  - Staging
+  - Futuro Prod
+
+**Convencao de tags:**
+
+```
+itbacr.azurecr.io/itb-bot:<branch>-<commit>
+itbacr.azurecr.io/itb-bot:dev-latest
+itbacr.azurecr.io/itb-bot:staging-latest
+```
+
+---
+
+### 2.5 Azure Key Vault
+
+**Nome:** `kv-itbdev`
+**SKU:** Standard
+
+**Secrets gerenciados:**
+- `binance-api-key`
+- `binance-secret-key`
+
+**Beneficios:**
+- Rotacao automatica de secrets
 - Audit logs completos
 - RBAC granular
-- Integração nativa com ACI
-
-### 2. Download Direto Binance → Azure (Em desenvolvimento)
-
-Eliminação do download local:
-
-```
-ANTES:  Binance API → Máquina Local → Upload → Azure Storage
-DEPOIS: Binance API → Azure Container → Azure Storage (direto)
-```
-
-**Implementação:**
-- Azure Container Instance dedicado para download
-- Scheduled trigger (cron) ou Event-based
-- Dados salvos diretamente no File Share
-
-### 3. Azure Machine Learning (Roadmap)
-
-- Treinamento gerenciado
-- Hyperparameter tuning
-- Model registry
-- A/B testing de modelos
+- Integracao nativa com ACI
 
 ---
 
-## Comandos Terraform
+### 2.6 Recovery Services Vault
 
-```bash
-# Inicializar
-cd infra/azure/terraform/envs/dev
+**Nome:** `vault697`
+**Localizacao:** `eastus`
+
+**Politica:**
+- Frequencia: diaria
+- Horario: 19:30 UTC
+- Retencao: 30 dias
+
+**File shares protegidos:**
+- `data-itb-1m`
+- `data-itb-5m`
+- `data-itb-1h`
+
+---
+
+## 3. Provisionamento (Terraform)
+
+Local dos arquivos:
+
+```
+infra/azure/terraform/envs/dev
+```
+
+Comandos:
+
+```
 terraform init
-
-# Planejar mudanças
 terraform plan
-
-# Aplicar
 terraform apply
+```
 
-# Destruir (cuidado!)
-terraform destroy
+Recursos gerenciados:
+- Resource Group
+- Storage Account
+- File Shares (1m, 5m, 1h)
+- Container Registry (importado)
+- Key Vault
+
+---
+
+## 4. Pipelines CI/CD (GitHub Actions)
+
+Pipelines principais:
+
+- `dev-aci-pipeline-1m.yml` - roda merge -> features -> labels -> train -> predict -> signals
+- `merge-only-aci.yml`
+- `labels_new-only-aci.yml`
+- `train-only-aci.yml`
+- `predict-signals-only-aci.yml`
+- `simulate-only.yml`
+- `download-binance-azure.yml` - download direto Binance -> Azure
+
+Pipelines separados facilitam debug e testes A/B.
+
+---
+
+## 5. Versionamento de Datasets
+
+Parquets e artefatos sao versionados seguindo:
+
+```
+vYYYY-MM-DD
+```
+
+Exemplo:
+
+```
+data-itb-1m/BTCUSDT/v2025-12-05/
+```
+
+Isso garante:
+- Reprodutibilidade
+- Comparacao entre versoes
+- Possibilidade de treinar modelos com datasets historicos precisos
+
+---
+
+## 6. Upload de datasets (Makefile + Scripts)
+
+Scripts:
+
+```
+tools/upload_1m_parquet.sh
+tools/upload_5m_parquet.sh
+tools/upload_1h_parquet.sh
+```
+
+Makefile:
+
+```
+make upload-1m
+make upload-5m
+make upload-1h
+```
+
+Os scripts:
+- Criam a pasta versionada
+- Fazem upload via `az storage file upload-batch`
+- Exibem os links dos arquivos enviados
+
+---
+
+## 7. Docker
+
+Dockerfile:
+
+- Base Python 3.11 Slim
+- Instala dependencias
+- Copia scripts e modulos
+
+Build local:
+
+```
+docker build -t itb-bot:local .
+```
+
+Push para ACR:
+
+```
+docker tag itb-bot:local itbacr.azurecr.io/itb-bot:dev-latest
+docker push itbacr.azurecr.io/itb-bot:dev-latest
+```
+
+---
+
+## 8. Ambientes
+
+### DEV
+- Rodado localmente ou em ACI
+- Usado para gerar parquets, treinar modelos, ajustar configs
+
+### STAGING (shadow mode)
+Executado local:
+
+```
+ENABLE_LIVE_TRADING=true python -m service.server -c configs/btcusdt_1m_staging_v2.jsonc
+ENABLE_LIVE_TRADING=true python -m service.server -c configs/btcusdt_5m_staging_v2.jsonc
+```
+
+Objetivo:
+- Emitir BUY/SELL reais
+- Nao executar trades
+- Gerar logs analisaveis
+
+### PROD (futuro)
+- Config dedicado
+- Execucao em ACI ou Azure Container Apps
+- Observabilidade completa
+
+---
+
+## 9. Logs & Analytics
+
+Estrutura:
+
+```
+logs/raw/
+logs/analytics/
+logs/server_1m_*.log
+logs/server_5m_*.log
+```
+
+Scripts:
+
+```
+parse_staging_logs.py
+analyze_btcusdt_1m.py
+analyze_btcusdt_5m.py
+analyze_btcusdt_1h.py
+```
+
+Resultados:
+- JSON automatico em `logs/analytics/`
+- Arquivos `.result.txt` para leitura humana
+
+---
+
+## 10. Roadmap Infra
+
+### Ja feito
+- Backup diario
+- Versionamento completo dos datasets
+- Upload automatizado
+- Pipelines dev rodando em ACI
+- Staging shadow mode
+- Key Vault para secrets
+- Terragrunt para multi-cloud
+
+### Proximos passos
+- Criar banco PostgreSQL para armazenar:
+  - PnL
+  - Sinais
+  - Metricas de modelo
+- Mover Recovery Vault para Terraform
+- Criar ambiente PROD
+- GCP Vertex AI para ML training
+
+---
+
+## 11. Comandos uteis
+
+Login:
+
+```
+az login
+az account set --subscription "Azure subscription 1"
+```
+
+Upload:
+
+```
+make upload-1m VERSION=v2025-12-05
+```
+
+Rodar staging:
+
+```
+make staging-1m
+make staging-5m
+```
+
+Pipeline dev:
+
+```
+make dev-1m
+make dev-5m
 ```
 
 ---
@@ -210,30 +366,12 @@ terraform destroy
 | Recurso | Custo Mensal | Notas |
 |---------|--------------|-------|
 | Storage Account (50GB) | ~$1.50 | LRS, Standard |
-| ACI (jobs esporádicos) | ~$5-15 | Pay-per-second |
+| ACI (jobs esporadicos) | ~$5-15 | Pay-per-second |
 | ACR (Basic) | ~$5 | Registry de imagens |
-| Key Vault (futuro) | ~$0.03/10k ops | Quase zero |
-| **Total estimado** | **~$15-25/mês** | Muito menor que VM 24/7 |
+| Key Vault | ~$0.03/10k ops | Quase zero |
+| **Total estimado** | **~$15-25/mes** | Muito menor que VM 24/7 |
 
 ---
 
-## Competências Demonstradas
-
-- **Infrastructure as Code:** Terraform, HCL
-- **Containerização:** Docker, multi-stage builds
-- **CI/CD:** GitHub Actions, reusable workflows
-- **Cloud Azure:** ACI, ACR, Storage, Key Vault
-- **Kubernetes:** Helm charts, AKS-ready
-- **Security:** Secrets management, RBAC, TLS
-- **DevOps Practices:** GitOps, IaC, automation
-
----
-
-## Autor
-
-**Habrazilay** - Senior DevOps Engineer
-
-Toda esta infraestrutura foi projetada e implementada por mim, do zero, demonstrando competências full-stack em DevOps e Cloud Architecture.
-
-- GitHub: [github.com/habrazilay](https://github.com/habrazilay)
-- Projeto: [intelligent-trading-bot](https://github.com/habrazilay/intelligent-trading-bot)
+Documento finalizado.
+Pronto para auditoria, evolucao e colaboracao profissional.

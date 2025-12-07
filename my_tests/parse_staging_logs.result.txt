@@ -1,0 +1,25 @@
+Usando log: server.log
+
+================================================================================
+Resumo staging BTCUSDT 1m
+================================================================================
+Sinais BUY:  328
+Sinais SELL: 120
+Trades fechados: 16
+Win rate: 31.2%
+Lucro total (notional 5.00): -0.0264 USDT
+Lucro médio por trade: -0.0016 USDT
+Melhor trade: 0.0157 USDT (2025-12-04 10:34:01,319 -> 2025-12-04 11:57:01,332)
+Pior trade:   -0.0136 USDT (2025-12-04 07:23:01,318 -> 2025-12-04 07:51:01,323)
+
+================================================================================
+Resumo staging BTCUSDT 5m
+=========================================================ana=======================
+Sinais BUY:  45
+Sinais SELL: 19
+Trades fechados: 8
+Win rate: 25.0%
+Lucro total (notional 5.00): -0.0346 USDT
+Lucro médio por trade: -0.0043 USDT
+Melhor trade: 0.0069 USDT (2025-12-04 14:30:01,714 -> 2025-12-04 15:00:01,888)
+Pior trade:   -0.0223 USDT (2025-12-04 06:20:01,563 -> 2025-12-04 08:25:01,707)

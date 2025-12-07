@@ -17,19 +17,24 @@
   "data_folder": "./DATA_ITB_1m",
 
   "symbol": "BTCUSDT",
-  "description": "BTCUSDT 1 min strategy",
-  "freq": "1m",           // frequência Binance
-  "pandas_freq": "1min",  // frequência Pandas
-
   "feature_file_name": "features.csv",
   "merge_file_name":   "data.csv",
   "matrix_file_name":  "matrix.csv",
+  "predict_file_name": "predictions.csv",
+  "signal_file_name":  "signals.csv",
+  "signal_models_file_name": "signal_models",
+
+  "model_folder": "MODELS",
+  "description": "BTCUSDT 1 min strategy",
+  "freq": "1m",           // frequência Binance
+  "pandas_freq": "1min",  // frequência Pandas
+  "time_column": "timestamp",
 
   // === JANELAS E TAMANHOS ==================================================
 
-  "label_horizon":   120,   // 120 min =  2 h (últimas linhas não têm label confiável)
-  "features_horizon":120,   // idem (look-back mínimo p/ features)
-  "train_length":    525600,// 365 d × 1440 min/d (1 ano de 1m)
+  "label_horizon":   60,   // 60 min =  1 h (últimas linhas não têm label confiável)
+  "features_horizon":60,   // idem (look-back mínimo p/ features)
+  "train_length":    259200, // por ex. 180 dias de 1m (opcionalmente em vez de 1 ano)
   "predict_length":  288,   // últimas 288 linhas mantidas atualizadas
   "append_overlap_records": 5,
 
@@ -80,23 +85,23 @@
     {
       "generator":"highlow2",
       "config":{
-        "columns":["close","high","low"],
-        "function":"high",
-        "thresholds":[2.0],
-        "tolerance":0.2,
-        "horizon":120,
-        "names":["high_20"]
+        "columns": ["close","high","low"],
+        "function": "high",
+        "thresholds": [0.5],       // 0.5% de alta em 60 min
+        "tolerance": 0.1,
+        "horizon": 60,
+        "names": ["high_05_60"]
       }
     },
     {
       "generator":"highlow2",
       "config":{
-        "columns":["close","high","low"],
-        "function":"low",
-        "thresholds":[2.0],
-        "tolerance":0.2,
-        "horizon":120,
-        "names":["low_20"]
+        "columns": ["close","high","low"],
+        "function": "low",
+        "thresholds": [0.5],       // 0.5% de queda em 60 min
+        "tolerance": 0.1,
+        "horizon": 60,
+        "names": ["low_05_60"]
       }
     }
   ],
@@ -120,7 +125,7 @@
     "high_low_close_ATR_14","close_STDDEV_20","close_STDDEV_60"
   ],
 
-  "labels": ["high_20","low_20"],
+  "labels": ["high_05_60","low_05_60"],
 
   "algorithms": [
     // Logistic Regression (baseline)
@@ -128,14 +133,22 @@
       "name":"lc",
       "algo":"lc",
       "params":{"is_scale":true},
-      "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":300}
+      "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":1000}
     },
-    // LightGBM – melhor para dados tabulares
+    // Random Forest
+    // {
+    //   "name":"rf",
+    //   "algo":"rf",
+    //   "params":{},
+    //   "train":{"n_estimators":100,"max_depth":10,"min_samples_leaf":10,"max_features":"sqrt"}
+    // },
+
+    //LightGBM – bom para tabular, não exige scaling
     {
       "name":"lgbm",
       "algo":"lgbm",
       "params":{},
-      "train":{"num_leaves":31,"learning_rate":0.05,"n_estimators":500,"max_depth":6}
+      "train":{"num_leaves":31,"learning_rate":0.05,"n_estimators":300,"max_depth":-1}
     }
   ],
 
@@ -146,7 +159,7 @@
     {
       "generator":"combine",
       "config":{
-        "columns":["high_20_lc","low_20_lc"],
+        "columns":["high_05_60_lc","low_05_60_lc"],
         "names":"trade_score",
         "combine":"difference"
       }
@@ -158,8 +171,8 @@
         "columns":"trade_score",
         "names":["buy_signal","sell_signal"],
         "parameters":{
-          "buy_signal_threshold":0.015,
-          "sell_signal_threshold":-0.01
+          "buy_signal_threshold": 0.003,
+          "sell_signal_threshold": -0.003
         }
       }
     }
@@ -203,8 +216,8 @@
     "signal_generator":"threshold_rule",
     "buy_sell_equal":false,
     "grid":{
-      "buy_signal_threshold":[0.01,0.015,0.02],
-      "sell_signal_threshold":[-0.01,-0.015,-0.02]
+      "buy_signal_threshold":[0.002,0.003,0.004],
+      "sell_signal_threshold":[-0.002,-0.003,-0.004]
     }
   },
 

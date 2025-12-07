@@ -1,12 +1,14 @@
-
 from decimal import *
 import asyncio
+from dotenv import load_dotenv
+load_dotenv()
 
 import click
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from binance import Client
+import traceback
 
 from common.types import Venue
 from service.App import *
@@ -20,28 +22,10 @@ from outputs.notifier_trades import *
 from outputs.notifier_scores import *
 from outputs.notifier_diagram import *
 from outputs import get_trader_functions
-
-
 import logging
+import os
 
-log = logging.getLogger('server')
-
-logging.basicConfig(
-    filename="server.log",
-    level=logging.DEBUG,
-    #format = "%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s",
-    format = "%(asctime)s %(levelname)s %(message)s",
-    #datefmt = '%Y-%m-%d %H:%M:%S',
-)
-
-# Get the collector functions based on the collector type
-
-#
-# Main procedure
-#
 async def main_task():
-    """This task will be executed regularly according to the schedule"""
-
     #
     # 1. Execute input adapters to receive new data from data source(s)
     #
@@ -84,15 +68,22 @@ async def main_task():
         try:
             await output_feature_set(App.analyzer.df, os, App.config, App.model_store)
         except Exception as e:
-            log.error(f"Error in output function: {e}")
-            return
+            log.error(
+                "Error in output function for generator=%s, output_config=%s: %s",
+                os.get("generator"),
+                os,
+                e,
+            )
+            log.error("Traceback for output error:\n%s", traceback.format_exc())
+            # Do not abort the whole main task because of one output failure
+            continue
 
     return
 
 
 async def main_collector_task():
     """
-    Retrieve raw data from venue-specific data sources and append to the main data frame
+    Retrieve raw data from venue-specific data sources and append to the main data frame <--
     """
     venue = App.config.get("venue")
     venue = Venue(venue)
@@ -104,6 +95,16 @@ async def main_collector_task():
     now_ts = now_timestamp()
 
     log.info(f"===> Start collector task. Timestamp {now_ts}. Interval [{start_ts},{end_ts}].")
+    log.info("=== START LIVE SESSION ===")
+    log.info(f"Symbol          : {App.config['symbol']}")
+    log.info(f"Freq (freq)     : {App.config['freq']}")
+    log.info(f"Label horizon   : {App.config.get('label_horizon')}")
+    log.info(f"Features horizon: {App.config.get('features_horizon')}")
+    log.info(f"Train length    : {App.config.get('train_length')}")
+    log.info(f"Algorithms      : {[a['name'] for a in App.config.get('algorithms', [])]}")
+    log.info(f"Trade model     : {App.config.get('trade_model')}")
+    log.info(f"ENABLE_LIVE_TRADING={os.getenv('ENABLE_LIVE_TRADING')}")
+    log.info("============================================")
 
     #
     # 1. Check server state (if necessary)
@@ -140,6 +141,22 @@ async def main_collector_task():
 def start_server(config_file):
 
     load_config(config_file)
+    # Run in predict-only mode when using the server
+    App.config["train"] = False
+    # Save config file path for reference
+    App.config["config_file"] = config_file
+
+    log.info("=== START LIVE SESSION ===")
+    log.info("Config file     : %s", config_file)
+    log.info("Symbol          : %s", App.config.get('symbol'))
+    log.info("Freq (freq)     : %s", App.config.get('freq'))
+    log.info("Label horizon   : %s", App.config.get('label_horizon'))
+    log.info("Features horizon: %s", App.config.get('features_horizon'))
+    log.info("Train length    : %s", App.config.get('train_length'))
+    log.info("Algorithms      : %s", [a.get('name') for a in App.config.get('algorithms', [])])
+    log.info("Trade model     : %s", App.config.get('trade_model'))
+    log.info("ENABLE_LIVE_TRADING=%s", os.getenv('ENABLE_LIVE_TRADING'))
+    log.info("========================================")
 
     App.config["train"] = False  # Server does not train - it only predicts therefore disable train mode
 
@@ -169,19 +186,25 @@ def start_server(config_file):
     #
     if venue == Venue.BINANCE:
         client_args = App.config.get("client_args", {})
-        if App.config.get("api_key"):
-            client_args["api_key"] = App.config.get("api_key")
-        if App.config.get("api_secret"):
-            client_args["api_secret"] = App.config.get("api_secret")
-        App.client = Client(**client_args)
+        # Prefer keys from config; fallback to environment variables loaded by dotenv
+        api_key = App.config.get("api_key") or os.getenv("BINANCE_API_KEY")
+        api_secret = App.config.get("api_secret") or os.getenv("BINANCE_API_SECRET")
 
-    if venue == Venue.MT5:
-        from service.mt5 import connect_mt5
-        authorized = connect_mt5(mt5_account_id=int(App.config.get("mt5_account_id")), mt5_password=str(App.config.get("mt5_password")), mt5_server=str(App.config.get("mt5_server")))
-        if not authorized:
-            log.error(f"Failed to connect to MT5. Check credentials and server details.")
+        if not api_key or not api_secret:
+            log.error(
+                "BINANCE_API_KEY / BINANCE_API_SECRET não foram encontrados. "
+                "Verifique seu .env ou o arquivo de configuração."
+            )
             return
-        App.client = mt5  
+
+        client_args["api_key"] = api_key
+        client_args["api_secret"] = api_secret
+
+        try:
+            App.client = Client(**client_args)
+        except Exception as e:
+            log.error("Falha ao inicializar Binance Client: %s", e)
+            return
 
     App.model_store = ModelStore(App.config)
     App.model_store.load_models()
@@ -222,21 +245,20 @@ def start_server(config_file):
 
     log.info(f"Finished initial data collection.")
 
-    # TODO: Only for binance output and if it has been defined
     # Initialize trade status (account, balances, orders etc.) in case we are going to really execute orders
-    if App.config.get("trade_model", {}).get("trader_binance"):
+    if venue == Venue.BINANCE and App.config.get("trade_model", {}).get("trader_binance"):
         try:
             App.loop.run_until_complete(trader_funcs['update_trade_status']())
         except Exception as e:
-            log.error(f"Problems trade status sync. {e}")
+            log.error(f"Problems during trade status sync. {e}")
 
         if data_provider_problems_exist():
-            log.error(f"Problems trade status sync.")
+            log.error("Problems during trade status sync.")
             return
 
-        log.info(f"Finished trade status sync (account, balances etc.)")
-        log.info(f"Balance: {App.config['base_asset']} = {str(App.account_info.base_quantity)}")
-        log.info(f"Balance: {App.config['quote_asset']} = {str(App.account_info.quote_quantity)}")
+        log.info("Finished trade status sync (account, balances etc.)")
+        log.info("Balance: %s = %s", App.config.get('base_asset'), str(App.account_info.base_quantity))
+        log.info("Balance: %s = %s", App.config.get('quote_asset'), str(App.account_info.quote_quantity))
 
     #
     # Register scheduler
@@ -282,10 +304,6 @@ def start_server(config_file):
         # if loop.stop() doesn't immediately halt everything.
         App.loop.close()
         log.info(f"Event loop closed.")
-        # Shutdown MT5 connection if it was initialized
-        if venue == Venue.MT5:
-            mt5.shutdown()
-            log.info("MT5 connection shutdown.")
 
     return 0
 

@@ -12,6 +12,7 @@ venv
 env
 *venv
 *.egg-info
+/itb-env/
 
 # Cache Python / testes
 __pycache__/

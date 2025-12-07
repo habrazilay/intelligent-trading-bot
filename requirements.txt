@@ -19,7 +19,7 @@ ta-lib  # Python wrapper for TA-lib (native) library
 
 # Algorithms
 scikit-learn==1.6.*
-# lightgbm==4.*
+lightgbm==4.*
 tensorflow==2.19.*
 python-dotenv>=1.0.0
 

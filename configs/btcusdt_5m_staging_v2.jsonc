@@ -1,7 +1,7 @@
 {
   // === EXECUÇÃO GERAL ======================================================
 
-  "train": true, // If true (offline). Use false for predict only (online) mode with only latest data
+  "train": false, // If true (offline). Use false for predict only (online) mode with only latest data
   "venue": "binance",
 
   // Credenciais ficam vazias → lidas de .env (BINANCE_API_KEY / BINANCE_API_SECRET)
@@ -14,22 +14,27 @@
   "telegram_chat_id": "",
 
   // Caminho relativo para rodar em qualquer máquina
-  "data_folder": "./DATA_ITB_1m",
+  "data_folder": "./DATA_ITB_5m",
 
   "symbol": "BTCUSDT",
-  "description": "BTCUSDT 1 min strategy",
-  "freq": "1m",           // frequência Binance
-  "pandas_freq": "1min",  // frequência Pandas
-
   "feature_file_name": "features.csv",
   "merge_file_name":   "data.csv",
   "matrix_file_name":  "matrix.csv",
+  "predict_file_name": "predictions.csv",
+  "signal_file_name":  "signals.csv",
+  "signal_models_file_name": "signal_models",
+
+  "model_folder": "MODELS",
+  "description": "BTCUSDT 5 min strategy",
+  "freq": "5m",           // frequência Binance
+  "pandas_freq": "5min",  // frequência Pandas
+  "time_column": "timestamp",
 
   // === JANELAS E TAMANHOS ==================================================
 
-  "label_horizon":   120,   // 120 min =  2 h (últimas linhas não têm label confiável)
-  "features_horizon":120,   // idem (look-back mínimo p/ features)
-  "train_length":    525600,// 365 d × 1440 min/d (1 ano de 1m)
+  "label_horizon":   24,   // 24 * 5m = 120 min =  2 h (últimas linhas não têm label confiável)
+  "features_horizon":24,   // idem (look-back mínimo p/ features)
+  "train_length":    105120,// ~1 ano de 5m (365 d × 288 candles/d)
   "predict_length":  288,   // últimas 288 linhas mantidas atualizadas
   "append_overlap_records": 5,
 
@@ -52,21 +57,21 @@
   // === FEATURES ===========================================================
 
   "feature_sets": [
-    // Médias móveis
     { "generator":"talib",
       "config":{"columns":["close"],"functions":["SMA"],"windows":[5,10,20,60]}},
 
-    // Momentum
     { "generator":"talib",
       "config":{"columns":["close"],"functions":["RSI"],"windows":[14]}},
+
     { "generator":"talib",
       "config":{"columns":["close"],"functions":["LINEARREG_SLOPE"],"windows":[10,20,60]}},
 
-    // Volatilidade
     { "generator":"talib",
       "config":{"columns":["high","low","close"],"functions":["ATR"],"windows":[14]}},
+
     { "generator":"talib",
       "config":{"columns":["close"],"functions":["STDDEV"],"windows":[20,60]}}
+  
 
     // Exemplo custom
     // { "generator":"common.my_feature_example:my_feature_example",
@@ -78,25 +83,25 @@
 
   "label_sets": [
     {
-      "generator":"highlow2",
-      "config":{
-        "columns":["close","high","low"],
-        "function":"high",
-        "thresholds":[2.0],
-        "tolerance":0.2,
-        "horizon":120,
-        "names":["high_20"]
+      "generator": "highlow2",
+      "config": {
+        "columns": ["close","high","low"],
+        "function": "high",
+        "thresholds": [0.5],
+        "tolerance": 0.05,
+        "horizon": 24,
+        "names": ["high_05_24"]
       }
     },
     {
-      "generator":"highlow2",
-      "config":{
-        "columns":["close","high","low"],
-        "function":"low",
-        "thresholds":[2.0],
-        "tolerance":0.2,
-        "horizon":120,
-        "names":["low_20"]
+      "generator": "highlow2",
+      "config": {
+        "columns": ["close","high","low"],
+        "function": "low",
+        "thresholds": [0.5],
+        "tolerance": 0.05,
+        "horizon": 24,
+        "names": ["low_05_24"]
       }
     }
   ],
@@ -117,10 +122,12 @@
     "close_SMA_5","close_SMA_10","close_SMA_20","close_SMA_60",
     "close_RSI_14",
     "close_LINEARREG_SLOPE_10","close_LINEARREG_SLOPE_20","close_LINEARREG_SLOPE_60",
-    "high_low_close_ATR_14","close_STDDEV_20","close_STDDEV_60"
+    "high_low_close_ATR_14",
+    "close_STDDEV_20","close_STDDEV_60"
   ],
 
-  "labels": ["high_20","low_20"],
+
+  "labels": ["high_05_24","low_05_24"],
 
   "algorithms": [
     // Logistic Regression (baseline)
@@ -128,16 +135,41 @@
       "name":"lc",
       "algo":"lc",
       "params":{"is_scale":true},
-      "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":300}
-    },
-    // LightGBM – melhor para dados tabulares
-    {
-      "name":"lgbm",
-      "algo":"lgbm",
-      "params":{},
-      "train":{"num_leaves":31,"learning_rate":0.05,"n_estimators":500,"max_depth":6}
+      "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":500}
     }
+
+    // LightGBM – bom para tabular, não exige scaling
+    // {
+    //     "name": "lgbm",
+    //     "algo": "lgbm",
+    //     "params": {},
+    //     "train": {
+    //     "num_leaves": 31,
+    //     "learning_rate": 0.03,
+    //     "n_estimators": 300,
+    //     "max_depth": -1,
+    //     "min_data_in_leaf": 50,
+    //     "feature_fraction": 0.9,
+    //     "bagging_fraction": 0.9,
+    //     "bagging_freq": 3
+    //     }
+    // }
   ],
+
+  "base_asset": "BTC",
+  "quote_asset": "USDT",
+
+  "trade_model": {
+    "trader_binance": true,
+    "no_trades_only_data_processing": false,      // staging: queremos trades reais
+    "test_order_before_submit": true,            // primeiro rodar com test_order na Binance
+    "simulate_order_execution": false,           // não simular, deixar trader_binance decidir
+
+    "percentage_used_for_trade": 2.0,            // 2% do saldo de USDT por trade
+    "min_notional_usdt": 5.0,                    // mínimo Binance (US$5)
+    "min_balance_usdt_for_percentage": 500.0,    // abaixo disso, usa min_notional
+    "limit_price_adjustment": 0.0              // +/-0.2% do último close
+  },
 
   // === SINAIS ==============================================================
 
@@ -146,7 +178,7 @@
     {
       "generator":"combine",
       "config":{
-        "columns":["high_20_lc","low_20_lc"],
+        "columns": ["high_05_24_lc","low_05_24_lc"], // "columns":["high_20_lc","low_20_lc","high_20_lgbm","low_20_lgbm"]
         "names":"trade_score",
         "combine":"difference"
       }
@@ -158,8 +190,8 @@
         "columns":"trade_score",
         "names":["buy_signal","sell_signal"],
         "parameters":{
-          "buy_signal_threshold":0.015,
-          "sell_signal_threshold":-0.01
+          "buy_signal_threshold":0.0035,
+          "sell_signal_threshold":-0.0045
         }
       }
     }
@@ -181,16 +213,15 @@
         "buy_signal_column":"buy_signal",
         "sell_signal_column":"sell_signal"
       }
+    },
+    {
+      "generator":"trader_binance",
+      "config":{
+        "buy_signal_column":"buy_signal",
+        "sell_signal_column":"sell_signal",
+        "percentage_used_for_trade":2.0
+      }
     }
-    // Descomente para live trade após testes:
-    // {
-    //   "generator":"trader_binance",
-    //   "config":{
-    //     "buy_signal_column":"buy_signal",
-    //     "sell_signal_column":"sell_signal",
-    //     "percentage_used_for_trade":20.0
-    //   }
-    // }
   ],
 
   // === OTIMIZAÇÃO DE THRESHOLDS ===========================================
@@ -202,19 +233,19 @@
     "topn_to_store":10,
     "signal_generator":"threshold_rule",
     "buy_sell_equal":false,
-    "grid":{
-      "buy_signal_threshold":[0.01,0.015,0.02],
-      "sell_signal_threshold":[-0.01,-0.015,-0.02]
+    "grid": {
+      "buy_signal_threshold":  [0.002, 0.003, 0.004],
+      "sell_signal_threshold": [-0.002, -0.003, -0.004]
     }
   },
 
   // === ROLLING PREDICT ====================================================
 
   "rolling_predict": {
-    "data_start": "2024-11-17 00:00:00",
+    "data_start": "2023-01-01 00:00:00",
     "data_end":   null,
     "prediction_start": null,
-    "prediction_size": 10080,   // 1 semana (minutos)
+    "prediction_size": 2016,   // ~1 semana (2016 candles de 5m)
     "prediction_steps": 4,
     "use_multiprocessing": true,
     "max_workers": 6

@@ -21,6 +21,14 @@ async def send_score_notification(df, model: dict, config: dict, model_store: Mo
     freq = config["freq"]
     time_column = config["time_column"]
 
+    # Normalize model: if a list of models is passed, use the first one
+    if isinstance(model, list):
+        if not model:
+            log.error("notifier_scores received an empty model list; skipping.")
+            return
+        log.warning("notifier_scores received a list for model; using the first element.")
+        model = model[0]
+
     score_column_names = model.get("score_column_names")
     if not score_column_names:
         log.error(f"Empty list of score columns in score notifier. At least one column name with a score has to be provided in config. Ignore")
@@ -139,6 +147,13 @@ def _find_score_band(score_value, model):
 
     If the score does not fit into any band, then band number is 0 and None for the band object are returned.
     """
+    # Normalize model in case a list is passed down accidentally
+    if isinstance(model, list):
+        if not model:
+            log.error("notifier_scores._find_score_band received empty model list; returning neutral band.")
+            return 0, None
+        log.warning("notifier_scores._find_score_band received model list; using first element.")
+        model = model[0]
 
     # First, check if the score falls within some positive thresholds (with greater than condition)
     bands = model.get("positive_bands", [])

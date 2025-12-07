@@ -37,6 +37,14 @@ async def trader_simulation(df, model: dict, config: dict, model_store: ModelSto
 
 
 async def generate_trader_transaction(df, model: dict, config: dict):
+
+    # Normalize model: if a list of models is passed, use the first one
+    if isinstance(model, list):
+        if not model:
+            log.error("notifier_diagram received an empty model list; skipping.")
+            return
+        log.warning("notifier_diagram received a list for model; using the first element.")
+        model = model[0]
     """
     Very simple trade strategy where we only buy and sell using the whole available amount
     """
