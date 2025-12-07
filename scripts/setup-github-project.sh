@@ -36,8 +36,8 @@ if ! gh auth status &> /dev/null; then
     exit 1
 fi
 
-# Get repo info
-REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+# Get repo info - use remote origin URL to get correct repo (not upstream fork)
+REPO=$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/' | sed 's/.*github.com[:/]\(.*\)/\1/')
 OWNER=$(echo $REPO | cut -d'/' -f1)
 echo -e "${GREEN}Repository: $REPO${NC}"
 echo ""
@@ -47,46 +47,33 @@ echo ""
 # =============================================================================
 echo -e "${YELLOW}Step 1: Creating labels...${NC}"
 
-declare -A LABELS=(
-    # Work Type
-    ["devops"]="d93f0b:Infrastructure, CI/CD, Terraform, Docker"
-    ["feature"]="0e8a16:New functionality or enhancement"
-    ["bug"]="b60205:Something isn't working"
-    ["research"]="5319e7:R&D, ML experiments, analysis"
+# Create labels using a simple approach (label|color|description)
+LABELS="devops|d93f0b|Infrastructure, CI/CD, Terraform, Docker
+feature|0e8a16|New functionality or enhancement
+bug|b60205|Something isn't working
+research|5319e7|R&D, ML experiments, analysis
+infrastructure|fbca04|Cloud resources, Terraform
+ml|d4c5f9|Machine Learning, models, training
+pipeline|c2e0c6|Data pipeline, merge, features, labels
+trading|006b75|Trading logic, signals, orders
+config|bfd4f2|Configuration files, settings
+priority-critical|b60205|Must be fixed ASAP
+priority-high|d93f0b|Important, do soon
+priority-medium|fbca04|Normal priority
+priority-low|0e8a16|Nice to have
+status-blocked|d73a4a|Blocked by something
+status-in-progress|0052cc|Currently being worked on
+status-review|fbca04|Ready for review
+env-dev|c5def5|Development environment
+env-staging|fef2c0|Staging environment
+env-prod|f9d0c4|Production environment
+documentation|0075ca|Documentation updates
+experiment|d4c5f9|ML experiment, testing hypothesis
+enhancement|a2eeef|Improvement to existing feature"
 
-    # Component
-    ["infrastructure"]="fbca04:Cloud resources, Terraform"
-    ["ml"]="d4c5f9:Machine Learning, models, training"
-    ["pipeline"]="c2e0c6:Data pipeline, merge, features, labels"
-    ["trading"]="006b75:Trading logic, signals, orders"
-    ["config"]="bfd4f2:Configuration files, settings"
-
-    # Priority
-    ["priority: critical"]="b60205:Must be fixed ASAP"
-    ["priority: high"]="d93f0b:Important, do soon"
-    ["priority: medium"]="fbca04:Normal priority"
-    ["priority: low"]="0e8a16:Nice to have"
-
-    # Status
-    ["status: blocked"]="d73a4a:Blocked by something"
-    ["status: in-progress"]="0052cc:Currently being worked on"
-    ["status: review"]="fbca04:Ready for review"
-
-    # Environment
-    ["env: dev"]="c5def5:Development environment"
-    ["env: staging"]="fef2c0:Staging environment"
-    ["env: prod"]="f9d0c4:Production environment"
-
-    # Other
-    ["documentation"]="0075ca:Documentation updates"
-    ["experiment"]="d4c5f9:ML experiment, testing hypothesis"
-    ["enhancement"]="a2eeef:Improvement to existing feature"
-)
-
-for label in "${!LABELS[@]}"; do
-    IFS=':' read -r color description <<< "${LABELS[$label]}"
+echo "$LABELS" | while IFS='|' read -r label color description; do
     echo -n "  Creating label '$label'... "
-    if gh label create "$label" --color "$color" --description "$description" 2>/dev/null; then
+    if gh label create "$label" --color "$color" --description "$description" --repo "$REPO" 2>/dev/null; then
         echo -e "${GREEN}created${NC}"
     else
         echo -e "${YELLOW}exists${NC}"
@@ -157,7 +144,7 @@ echo -e "${YELLOW}Step 4: Creating sample issues...${NC}"
 
 # DevOps sample
 echo -n "  Creating DevOps sample issue... "
-DEVOPS_ISSUE=$(gh issue create \
+DEVOPS_ISSUE=$(gh issue create --repo "$REPO" \
     --title "[DevOps] Setup monitoring and alerting" \
     --body "## Description
 Setup monitoring for the trading bot infrastructure.
@@ -171,13 +158,13 @@ Setup monitoring for the trading bot infrastructure.
 dev → staging → prod" \
     --label "devops" \
     --label "infrastructure" \
-    --label "priority: medium" \
-    --label "env: dev" 2>/dev/null | tail -1)
+    --label "priority-medium" \
+    --label "env-dev" 2>/dev/null | tail -1)
 echo -e "${GREEN}$DEVOPS_ISSUE${NC}"
 
 # Feature sample
 echo -n "  Creating Feature sample issue... "
-FEATURE_ISSUE=$(gh issue create \
+FEATURE_ISSUE=$(gh issue create --repo "$REPO" \
     --title "[Feature] Add support for ETHUSDT trading" \
     --body "## Description
 Extend the trading bot to support ETHUSDT pair.
@@ -191,13 +178,13 @@ Extend the trading bot to support ETHUSDT pair.
 Use same approach as BTCUSDT" \
     --label "feature" \
     --label "trading" \
-    --label "priority: high" \
-    --label "env: dev" 2>/dev/null | tail -1)
+    --label "priority-high" \
+    --label "env-dev" 2>/dev/null | tail -1)
 echo -e "${GREEN}$FEATURE_ISSUE${NC}"
 
 # R&D sample
 echo -n "  Creating R&D sample issue... "
-RD_ISSUE=$(gh issue create \
+RD_ISSUE=$(gh issue create --repo "$REPO" \
     --title "[R&D] Experiment with XGBoost vs LightGBM" \
     --body "## Hypothesis
 XGBoost may perform better than LightGBM for 1m timeframe.
@@ -219,7 +206,7 @@ BTCUSDT
     --label "research" \
     --label "ml" \
     --label "experiment" \
-    --label "priority: medium" 2>/dev/null | tail -1)
+    --label "priority-medium" 2>/dev/null | tail -1)
 echo -e "${GREEN}$RD_ISSUE${NC}"
 
 echo ""
