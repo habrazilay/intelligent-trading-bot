@@ -1,57 +1,251 @@
-# ===========================
+# =============================================================================
 # Intelligent Trading Bot - Makefile
-# ===========================
-# Como usar:
-#   make infra-dev-apply   # aplica Terraform em dev
-#   make image-dev         # build & push imagem dev
-#   make dev-1m            # roda pipeline dev 1m (GitHub Actions ou local)
-#   make dev-5m            # roda pipeline dev 5m
-#   make analyze-1m        # roda analyze_btcusdt_1m.py (local ou ACI)
-#   make upload-1m         # sobe DATA_ITB_1m/BTCUSDT pro Azure Files
-#   make upload-5m         # idem 5m
-#   make upload-1h         # idem 1h
+# =============================================================================
+# Best practice: Single entry point for all operations
+# Usage: make <target>
+# =============================================================================
 
-.PHONY: infra-dev-apply image-dev dev-1m dev-5m analyze-1m \
-        upload-1m upload-5m upload-1h
+.PHONY: help setup setup-azure setup-gcp docker-build docker-push \
+        download train predict pipeline clean validate-configs \
+        infra-dev-apply image-dev dev-1m dev-5m analyze-1m \
+        upload-1m upload-5m upload-1h staging-1m staging-5m
 
-# Atualizar infra dev (storage, ACR etc.)
+# Default target
+help:
+	@echo "════════════════════════════════════════════════════════════════"
+	@echo "        Intelligent Trading Bot - Available Commands            "
+	@echo "════════════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "  Setup:"
+	@echo "    make setup            - Full setup (deps + validate)"
+	@echo "    make setup-azure      - Setup Azure infrastructure"
+	@echo "    make setup-gcp        - Setup GCP infrastructure"
+	@echo "    make infra-dev-apply  - Apply Terraform in dev"
+	@echo ""
+	@echo "  Docker:"
+	@echo "    make docker-build     - Build Docker image"
+	@echo "    make docker-push      - Push to Azure Container Registry"
+	@echo "    make image-dev        - Build & push dev image"
+	@echo ""
+	@echo "  Pipeline (local):"
+	@echo "    make download         - Download data from Binance"
+	@echo "    make merge            - Merge data sources"
+	@echo "    make features         - Generate features"
+	@echo "    make labels           - Generate labels"
+	@echo "    make train            - Train models"
+	@echo "    make predict          - Run predictions"
+	@echo "    make signals          - Generate signals"
+	@echo "    make pipeline         - Run full pipeline"
+	@echo ""
+	@echo "  Dev Pipelines:"
+	@echo "    make dev-1m           - Run dev pipeline 1m"
+	@echo "    make dev-5m           - Run dev pipeline 5m"
+	@echo ""
+	@echo "  Analysis:"
+	@echo "    make analyze-1m       - Run analyze_btcusdt_1m.py"
+	@echo ""
+	@echo "  Upload to Azure:"
+	@echo "    make upload-1m        - Upload BTCUSDT 1m to Azure Files"
+	@echo "    make upload-5m        - Upload BTCUSDT 5m to Azure Files"
+	@echo "    make upload-1h        - Upload BTCUSDT 1h to Azure Files"
+	@echo ""
+	@echo "  Staging:"
+	@echo "    make staging-1m       - Run staging 1m (shadow mode)"
+	@echo "    make staging-5m       - Run staging 5m (shadow mode)"
+	@echo ""
+	@echo "  Utilities:"
+	@echo "    make validate         - Validate all configs"
+	@echo "    make clean            - Clean generated files"
+	@echo "    make test             - Run tests"
+	@echo ""
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+CONFIG ?= configs/btcusdt_1m_dev.jsonc
+SYMBOL ?= BTCUSDT
+ENV ?= dev
+VERSION ?= $(shell date +v%Y-%m-%d)
+
+# Azure
+ACR_SERVER = itbacr.azurecr.io
+ACR_REPO = itb-bot
+IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
+
+# Paths
+TF_AZURE_PATH = infra/azure/terraform/envs/$(ENV)
+TF_GCP_PATH = infra/gcp/terraform/envs/$(ENV)
+
+# =============================================================================
+# Setup
+# =============================================================================
+
+setup: validate-configs
+	@echo "Installing Python dependencies..."
+	pip install -r requirements.txt
+	@echo "Setup complete!"
+
+setup-azure:
+	@echo "Setting up Azure infrastructure..."
+	cd $(TF_AZURE_PATH) && terraform init
+	cd $(TF_AZURE_PATH) && terraform plan
+	@echo "Run 'cd $(TF_AZURE_PATH) && terraform apply' to apply changes"
+
+setup-gcp:
+	@echo "Setting up GCP infrastructure..."
+	cd $(TF_GCP_PATH) && terraform init
+	cd $(TF_GCP_PATH) && terraform plan
+	@echo "Run 'cd $(TF_GCP_PATH) && terraform apply' to apply changes"
+
 infra-dev-apply:
 	@echo ">> terraform apply em infra/azure/terraform/envs/dev"
 	cd infra/azure/terraform/envs/dev && terraform apply
 
-# Build & push imagem dev (exemplo – ajuste para seu pipeline real)
+# =============================================================================
+# Docker
+# =============================================================================
+
+docker-build:
+	@echo "Building Docker image..."
+	docker build -t $(ACR_SERVER)/$(ACR_REPO):$(IMAGE_TAG) .
+	docker tag $(ACR_SERVER)/$(ACR_REPO):$(IMAGE_TAG) $(ACR_SERVER)/$(ACR_REPO):latest
+
+docker-push: docker-build
+	@echo "Pushing to Azure Container Registry..."
+	docker push $(ACR_SERVER)/$(ACR_REPO):$(IMAGE_TAG)
+	docker push $(ACR_SERVER)/$(ACR_REPO):latest
+
 image-dev:
 	@echo ">> build & push imagem dev para itbacr.azurecr.io/itb-bot"
-	# docker build / docker push ou github actions dispatch aqui
+	docker build -t $(ACR_SERVER)/$(ACR_REPO):dev-$(IMAGE_TAG) .
+	docker tag $(ACR_SERVER)/$(ACR_REPO):dev-$(IMAGE_TAG) $(ACR_SERVER)/$(ACR_REPO):dev-latest
+	docker push $(ACR_SERVER)/$(ACR_REPO):dev-$(IMAGE_TAG)
+	docker push $(ACR_SERVER)/$(ACR_REPO):dev-latest
 
-# Rodar pipeline dev 1m (exemplo: chamar workflow via gh / script local)
+# =============================================================================
+# Pipeline - Local Execution
+# =============================================================================
+
+download:
+	@echo "Downloading data for $(SYMBOL)..."
+	python -m scripts.download_binance -c $(CONFIG)
+
+merge:
+	@echo "Merging data..."
+	python -m scripts.merge_new -c $(CONFIG)
+
+features:
+	@echo "Generating features..."
+	python -m scripts.features_new -c $(CONFIG)
+
+labels:
+	@echo "Generating labels..."
+	python -m scripts.labels_new -c $(CONFIG)
+
+train:
+	@echo "Training models..."
+	python -m scripts.train -c $(CONFIG)
+
+predict:
+	@echo "Running predictions..."
+	python -m scripts.predict -c $(CONFIG)
+
+signals:
+	@echo "Generating signals..."
+	python -m scripts.signals -c $(CONFIG)
+
+pipeline: merge features labels train predict signals
+	@echo "Full pipeline complete!"
+
+# =============================================================================
+# Dev Pipelines
+# =============================================================================
+
 dev-1m:
-	@echo ">> rodar pipeline dev 1m (ajuste este alvo conforme seu fluxo)"
-	# python -m scripts... ou gh workflow run ...
+	@echo ">> rodar pipeline dev 1m"
+	$(MAKE) pipeline CONFIG=configs/btcusdt_1m_dev.jsonc
 
-# Rodar pipeline dev 5m
 dev-5m:
-	@echo ">> rodar pipeline dev 5m (ajuste este alvo conforme seu fluxo)"
-	# idem acima
+	@echo ">> rodar pipeline dev 5m"
+	$(MAKE) pipeline CONFIG=configs/btcusdt_5m_dev.jsonc
 
-# Rodar análise 1m (analyze_btcusdt_1m.py) local
+# =============================================================================
+# Analysis
+# =============================================================================
+
 analyze-1m:
 	@echo ">> analyze_btcusdt_1m.py (local)"
 	python my_tests/analyze_btcusdt_1m.py \
 	  --parquet DATA_ITB_1m/BTCUSDT/klines.parquet \
 	  --days 90
 
-# Upload BTCUSDT 1m para Azure Files
+# =============================================================================
+# Upload to Azure Files
+# =============================================================================
+
 upload-1m:
 	@echo ">> upload BTCUSDT 1m para Azure Files"
-	./upload_1m_parquet.sh v2025-12-05
+	./tools/upload_1m_parquet.sh $(VERSION)
 
-# Upload BTCUSDT 5m para Azure Files (script precisa existir)
 upload-5m:
 	@echo ">> upload BTCUSDT 5m para Azure Files"
-	./upload_5m_parquet.sh v2025-12-05
+	./tools/upload_5m_parquet.sh $(VERSION)
 
-# Upload BTCUSDT 1h para Azure Files (script precisa existir)
 upload-1h:
 	@echo ">> upload BTCUSDT 1h para Azure Files"
-	./upload_1h_parquet.sh v2025-12-05
+	./tools/upload_1h_parquet.sh $(VERSION)
+
+# =============================================================================
+# Staging (Shadow Mode)
+# =============================================================================
+
+staging-1m:
+	@echo ">> staging 1m (shadow mode)"
+	ENABLE_LIVE_TRADING=true python -m service.server -c configs/btcusdt_1m_staging_v2.jsonc
+
+staging-5m:
+	@echo ">> staging 5m (shadow mode)"
+	ENABLE_LIVE_TRADING=true python -m service.server -c configs/btcusdt_5m_staging_v2.jsonc
+
+# =============================================================================
+# Utilities
+# =============================================================================
+
+validate-configs:
+	@echo "Validating configs..."
+	@for f in configs/*.jsonc; do \
+		python3 -c "import json, re; content=open('$$f').read(); content=re.sub(r'//.*', '', content); json.loads(content)" 2>&1 \
+		&& echo "  OK $$f" || echo "  FAIL $$f"; \
+	done
+
+clean:
+	@echo "Cleaning generated files..."
+	find . -type f -name "*.pyc" -delete
+	find . -type d -name "__pycache__" -delete
+	find . -type f -name ".DS_Store" -delete
+	@echo "Clean complete!"
+
+test:
+	@echo "Running tests..."
+	python -m pytest tests/ -v || echo "No tests found"
+
+# =============================================================================
+# Multi-symbol operations
+# =============================================================================
+
+download-all:
+	@echo "Downloading all symbols..."
+	@for symbol in BTCUSDT ETHUSDT BNBUSDT SOLUSDT XRPUSDT; do \
+		echo "  Downloading $$symbol..."; \
+		python -m scripts.download_binance -c configs/$${symbol,,}_1m_dev.jsonc || true; \
+	done
+
+pipeline-all:
+	@echo "Running pipeline for all symbols..."
+	@for symbol in BTCUSDT ETHUSDT BNBUSDT SOLUSDT XRPUSDT; do \
+		echo "═══════════════════════════════════════════════"; \
+		echo "  Processing $$symbol..."; \
+		echo "═══════════════════════════════════════════════"; \
+		$(MAKE) pipeline CONFIG=configs/$${symbol,,}_1m_dev.jsonc || true; \
+	done

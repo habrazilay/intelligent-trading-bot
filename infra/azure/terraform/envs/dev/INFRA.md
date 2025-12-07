@@ -1,4 +1,8 @@
-🌐 INFRA.md – Infraestrutura do Projeto Intelligent Trading Bot
+# INFRA.md - Infraestrutura do Projeto Intelligent Trading Bot
+
+> **Autor:** Habrazilay
+> **Role:** Senior DevOps Engineer
+> **Implementacao:** 100% autoral - do zero ao deploy em producao
 
 Documento oficial da infraestrutura do projeto.
 Mantido no branch dev.
@@ -6,35 +10,39 @@ Objetivo: garantir reprodutibilidade, previsibilidade e continuidade operacional
 
 ---
 
-📌 1. Arquitetura Geral
+## 1. Arquitetura Geral
 
 A infraestrutura atual opera no modelo:
 
-Local Dev → Azure Dev (ACI + Storage) → Staging Shadow Mode → Futuro Prod Live Trading
+```
+Local Dev -> Azure Dev (ACI + Storage) -> Staging Shadow Mode -> Futuro Prod Live Trading
+```
 
 A plataforma usa:
 - Azure Storage Account para datasets versionados (Parquet, CSV, modelos).
 - Azure Container Registry (ACR) para imagens Docker do bot e pipelines.
 - Azure Container Instances (ACI) para rodar pipelines offline (treino, merge, labels, predict).
-- Recovery Services Vault para backup diário dos dados críticos.
+- Azure Key Vault para gestao segura de secrets (Binance API keys).
+- Recovery Services Vault para backup diario dos dados criticos.
 - Terraform para provisionamento da infraestrutura base.
+- Terragrunt para configuracao DRY multi-cloud (Azure + GCP).
 
 ---
 
-🗂️ 2. Recursos Azure
+## 2. Recursos Azure
 
 ### 2.1 Resource Group (RG)
 
-**Nome:** `rg-itb-dev`  
-**Função:** Agrupar todos os recursos do ambiente de desenvolvimento e staging.
+**Nome:** `rg-itb-dev`
+**Funcao:** Agrupar todos os recursos do ambiente de desenvolvimento e staging.
 
 ---
 
 ### 2.2 Storage Account
 
-**Nome:** `stitbdev`  
-**Tipo:** StorageV2  
-**Localização:** eastus  
+**Nome:** `stitbdev`
+**Tipo:** StorageV2
+**Localizacao:** eastus
 
 **Usos:**
 - Armazenamento de datasets versionados (1m, 5m, 1h).
@@ -43,9 +51,9 @@ A plataforma usa:
 - Fonte de dados para pipelines de treino em ACI.
 
 **Acesso:**
-- Chave primária habilitada  
-- Public Network Access: Enabled  
-- TLS 1.2  
+- Chave primaria habilitada
+- Public Network Access: Enabled
+- TLS 1.2
 
 ---
 
@@ -53,13 +61,13 @@ A plataforma usa:
 
 Estrutura atual:
 
-| File share      | Propósito                     |
+| File share      | Proposito                     |
 |-----------------|-------------------------------|
 | data-itb-1m     | Dataset BTCUSDT 1m            |
 | data-itb-5m     | Dataset BTCUSDT 5m            |
 | data-itb-1h     | Dataset BTCUSDT 1h            |
 
-Padrão interno:
+Padrao interno:
 
 ```
 <share-name>/
@@ -82,10 +90,10 @@ Padrão interno:
 
 ### 2.4 Azure Container Registry (ACR)
 
-**Nome:** `itbacr`  
-**Login server:** `itbacr.azurecr.io`  
-**SKU:** Basic  
-**Admin user:** Enabled  
+**Nome:** `itbacr`
+**Login server:** `itbacr.azurecr.io`
+**SKU:** Basic
+**Admin user:** Enabled
 
 **Usos:**
 - Armazenar imagens Docker para:
@@ -94,7 +102,7 @@ Padrão interno:
   - Staging
   - Futuro Prod
 
-**Convenção de tags:**
+**Convencao de tags:**
 
 ```
 itbacr.azurecr.io/itb-bot:<branch>-<commit>
@@ -104,15 +112,32 @@ itbacr.azurecr.io/itb-bot:staging-latest
 
 ---
 
-### 2.5 Recovery Services Vault
+### 2.5 Azure Key Vault
 
-**Nome:** `vault697`  
-**Localização:** `eastus`
+**Nome:** `kv-itbdev`
+**SKU:** Standard
 
-**Política:**
-- Frequência: diária
-- Horário: 19:30 UTC
-- Retenção: 30 dias
+**Secrets gerenciados:**
+- `binance-api-key`
+- `binance-secret-key`
+
+**Beneficios:**
+- Rotacao automatica de secrets
+- Audit logs completos
+- RBAC granular
+- Integracao nativa com ACI
+
+---
+
+### 2.6 Recovery Services Vault
+
+**Nome:** `vault697`
+**Localizacao:** `eastus`
+
+**Politica:**
+- Frequencia: diaria
+- Horario: 19:30 UTC
+- Retencao: 30 dias
 
 **File shares protegidos:**
 - `data-itb-1m`
@@ -121,7 +146,7 @@ itbacr.azurecr.io/itb-bot:staging-latest
 
 ---
 
-🛠️ 3. Provisionamento (Terraform)
+## 3. Provisionamento (Terraform)
 
 Local dos arquivos:
 
@@ -138,33 +163,33 @@ terraform apply
 ```
 
 Recursos gerenciados:
-- Resource Group  
-- Storage Account  
-- File Shares (1m, 5m, 1h)  
+- Resource Group
+- Storage Account
+- File Shares (1m, 5m, 1h)
 - Container Registry (importado)
-
-⚠️ O Recovery Services Vault ainda não está sob Terraform.
+- Key Vault
 
 ---
 
-🚀 4. Pipelines CI/CD (GitHub Actions)
+## 4. Pipelines CI/CD (GitHub Actions)
 
 Pipelines principais:
 
-- `dev-aci-pipeline-1m.yml` – roda merge → features → labels → train → predict → signals  
-- `merge-only-aci.yml`  
-- `labels_new-only-aci.yml`  
-- `train-only-aci.yml`  
-- `predict-signals-only-aci.yml`  
-- `simulate-only.yml`  
+- `dev-aci-pipeline-1m.yml` - roda merge -> features -> labels -> train -> predict -> signals
+- `merge-only-aci.yml`
+- `labels_new-only-aci.yml`
+- `train-only-aci.yml`
+- `predict-signals-only-aci.yml`
+- `simulate-only.yml`
+- `download-binance-azure.yml` - download direto Binance -> Azure
 
 Pipelines separados facilitam debug e testes A/B.
 
 ---
 
-📊 5. Versionamento de Datasets
+## 5. Versionamento de Datasets
 
-Parquets e artefatos são versionados seguindo:
+Parquets e artefatos sao versionados seguindo:
 
 ```
 vYYYY-MM-DD
@@ -177,13 +202,13 @@ data-itb-1m/BTCUSDT/v2025-12-05/
 ```
 
 Isso garante:
-- Reprodutibilidade  
-- Comparação entre versões  
-- Possibilidade de treinar modelos com datasets históricos precisos  
+- Reprodutibilidade
+- Comparacao entre versoes
+- Possibilidade de treinar modelos com datasets historicos precisos
 
 ---
 
-📦 6. Upload de datasets (Makefile + Scripts)
+## 6. Upload de datasets (Makefile + Scripts)
 
 Scripts:
 
@@ -208,13 +233,13 @@ Os scripts:
 
 ---
 
-🐳 7. Docker
+## 7. Docker
 
 Dockerfile:
 
 - Base Python 3.11 Slim
-- Instala dependências
-- Copia scripts e módulos
+- Instala dependencias
+- Copia scripts e modulos
 
 Build local:
 
@@ -231,7 +256,7 @@ docker push itbacr.azurecr.io/itb-bot:dev-latest
 
 ---
 
-🧪 8. Ambientes
+## 8. Ambientes
 
 ### DEV
 - Rodado localmente ou em ACI
@@ -247,17 +272,17 @@ ENABLE_LIVE_TRADING=true python -m service.server -c configs/btcusdt_5m_staging_
 
 Objetivo:
 - Emitir BUY/SELL reais
-- Não executar trades
-- Gerar logs analisáveis
+- Nao executar trades
+- Gerar logs analisaveis
 
 ### PROD (futuro)
 - Config dedicado
-- Execução em ACI ou Azure Container Apps
+- Execucao em ACI ou Azure Container Apps
 - Observabilidade completa
 
 ---
 
-📈 9. Logs & Analytics
+## 9. Logs & Analytics
 
 Estrutura:
 
@@ -278,31 +303,34 @@ analyze_btcusdt_1h.py
 ```
 
 Resultados:
-- JSON automático em `logs/analytics/`
+- JSON automatico em `logs/analytics/`
 - Arquivos `.result.txt` para leitura humana
 
 ---
 
-🧠 10. Roadmap Infra
+## 10. Roadmap Infra
 
-### ✔️ Já feito
-- Backup diário
+### Ja feito
+- Backup diario
 - Versionamento completo dos datasets
 - Upload automatizado
 - Pipelines dev rodando em ACI
 - Staging shadow mode
+- Key Vault para secrets
+- Terragrunt para multi-cloud
 
-### 🔜 Próximos passos
+### Proximos passos
 - Criar banco PostgreSQL para armazenar:
-  - PnL  
-  - Sinais  
-  - Métricas de modelo  
+  - PnL
+  - Sinais
+  - Metricas de modelo
 - Mover Recovery Vault para Terraform
 - Criar ambiente PROD
+- GCP Vertex AI para ML training
 
 ---
 
-🧩 11. Comandos úteis
+## 11. Comandos uteis
 
 Login:
 
@@ -333,6 +361,17 @@ make dev-5m
 
 ---
 
-✔️ Documento finalizado.
+## Custos Estimados
 
-Pronto para auditoria, evolução e colaboração profissional.
+| Recurso | Custo Mensal | Notas |
+|---------|--------------|-------|
+| Storage Account (50GB) | ~$1.50 | LRS, Standard |
+| ACI (jobs esporadicos) | ~$5-15 | Pay-per-second |
+| ACR (Basic) | ~$5 | Registry de imagens |
+| Key Vault | ~$0.03/10k ops | Quase zero |
+| **Total estimado** | **~$15-25/mes** | Muito menor que VM 24/7 |
+
+---
+
+Documento finalizado.
+Pronto para auditoria, evolucao e colaboracao profissional.

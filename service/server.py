@@ -1,4 +1,3 @@
-
 from decimal import *
 import asyncio
 from dotenv import load_dotenv
@@ -24,6 +23,7 @@ from outputs.notifier_scores import *
 from outputs.notifier_diagram import *
 from outputs import get_trader_functions
 import logging
+import os
 
 async def main_task():
     #
@@ -83,7 +83,7 @@ async def main_task():
 
 async def main_collector_task():
     """
-    Retrieve raw data from venue-specific data sources and append to the main data frame
+    Retrieve raw data from venue-specific data sources and append to the main data frame <--
     """
     venue = App.config.get("venue")
     venue = Venue(venue)
@@ -186,16 +186,19 @@ def start_server(config_file):
     #
     if venue == Venue.BINANCE:
         client_args = App.config.get("client_args", {})
-        # First, try config; fallback to environment variables loaded by dotenv
+        # Prefer keys from config; fallback to environment variables loaded by dotenv
         api_key = App.config.get("api_key") or os.getenv("BINANCE_API_KEY")
         api_secret = App.config.get("api_secret") or os.getenv("BINANCE_API_SECRET")
 
         if not api_key or not api_secret:
-            log.error("BINANCE_API_KEY / BINANCE_API_SECRET não foram encontrados. Verifique seu .env ou o arquivo de configuração.")
+            log.error(
+                "BINANCE_API_KEY / BINANCE_API_SECRET não foram encontrados. "
+                "Verifique seu .env ou o arquivo de configuração."
+            )
             return
 
-        client_args["apiKey"] = api_key
-        client_args["apiSecret"] = api_secret
+        client_args["api_key"] = api_key
+        client_args["api_secret"] = api_secret
 
         try:
             App.client = Client(**client_args)
@@ -247,15 +250,15 @@ def start_server(config_file):
         try:
             App.loop.run_until_complete(trader_funcs['update_trade_status']())
         except Exception as e:
-            log.error(f"Problems trade status sync. {e}")
+            log.error(f"Problems during trade status sync. {e}")
 
         if data_provider_problems_exist():
-            log.error(f"Problems trade status sync.")
+            log.error("Problems during trade status sync.")
             return
 
-        log.info(f"Finished trade status sync (account, balances etc.)")
-        log.info(f"Balance: {App.config['base_asset']} = {str(App.account_info.base_quantity)}")
-        log.info(f"Balance: {App.config['quote_asset']} = {str(App.account_info.quote_quantity)}")
+        log.info("Finished trade status sync (account, balances etc.)")
+        log.info("Balance: %s = %s", App.config.get('base_asset'), str(App.account_info.base_quantity))
+        log.info("Balance: %s = %s", App.config.get('quote_asset'), str(App.account_info.quote_quantity))
 
     #
     # Register scheduler

@@ -1,17 +1,38 @@
 # -----------------------------------------------------------------------------
-# General
+# GCP Project
 # -----------------------------------------------------------------------------
 
-variable "project_name" {
-  description = "Logical name for this environment (used as suffix/prefix in resource names)"
+variable "project_id" {
+  description = "GCP Project ID"
   type        = string
-  default     = "itb-dev"
 }
 
-variable "location" {
-  description = "Azure region"
+variable "region" {
+  description = "GCP region"
   type        = string
-  default     = "eastus"
+  default     = "us-central1"
+}
+
+variable "zone" {
+  description = "GCP zone"
+  type        = string
+  default     = "us-central1-a"
+}
+
+# -----------------------------------------------------------------------------
+# Naming
+# -----------------------------------------------------------------------------
+
+variable "environment" {
+  description = "Environment name (dev, staging, prod)"
+  type        = string
+  default     = "dev"
+}
+
+variable "project_name" {
+  description = "Project name for resource naming"
+  type        = string
+  default     = "itb"
 }
 
 # -----------------------------------------------------------------------------
@@ -27,23 +48,5 @@ variable "binance_api_key" {
 variable "binance_api_secret" {
   description = "Binance API Secret"
   type        = string
-  sensitive   = true
-}
-
-# -----------------------------------------------------------------------------
-# Secrets - Telegram (optional)
-# -----------------------------------------------------------------------------
-
-variable "telegram_bot_token" {
-  description = "Telegram Bot Token (optional)"
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-variable "telegram_chat_id" {
-  description = "Telegram Chat ID (optional)"
-  type        = string
-  default     = ""
   sensitive   = true
 }

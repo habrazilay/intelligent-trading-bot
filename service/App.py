@@ -98,7 +98,7 @@ def load_config(config_file):
     if config_file:
         config_file_path = PACKAGE_ROOT / config_file
         with open(config_file_path, encoding='utf-8') as json_file:
-            #conf_str = json.load(json_file)
+            conf_str = json.load(json_file)
             conf_str = json_file.read()
 
             # Remove everything starting with // and till the line end
