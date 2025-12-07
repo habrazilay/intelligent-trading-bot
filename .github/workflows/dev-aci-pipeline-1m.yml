@@ -6,7 +6,7 @@ on:
       config_path:
         description: "Path to JSONC config file"
         required: true
-        default: "configs/btcusdt_1m_dev.jsonc"
+        default: "configs/btcusdt_1m_dev_optimazed.jsonc"
       image_tag:
         description: "Image tag (just the tag, e.g. amd64-1764313462)"
         required: true

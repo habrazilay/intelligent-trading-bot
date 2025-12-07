@@ -1,0 +1,26 @@
+{
+  "run_timestamp": "2025-12-04T21:58:14.177653",
+  "log_source": "staging.log",
+  "btcusdt_1m": {
+    "timeframe": "1m",
+    "signals_buy": 328,
+    "signals_sell": 120,
+    "closed_trades": 16,
+    "win_rate": 0.3125,
+    "total_pnl_usdt": -0.0264,
+    "avg_pnl_usdt": -0.0016,
+    "best_trade_usdt": 0.0157,
+    "worst_trade_usdt": -0.0136
+  },
+  "btcusdt_5m": {
+    "timeframe": "5m",
+    "signals_buy": 45,
+    "signals_sell": 19,
+    "closed_trades": 8,
+    "win_rate": 0.25,
+    "total_pnl_usdt": -0.0346,
+    "avg_pnl_usdt": -0.0043,
+    "best_trade_usdt": 0.0069,
+    "worst_trade_usdt": -0.0223
+  }
+}

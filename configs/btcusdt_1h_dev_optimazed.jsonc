@@ -1,0 +1,195 @@
+{
+  // === EXECUÇÃO GERAL ======================================================
+
+  "train": true,    // If true (offline). Use false for predict only (online) mode with only latest data
+  "venue": "binance",
+
+
+  // Credenciais ficam vazias → lidas de .env (BINANCE_API_KEY / BINANCE_API_SECRET)
+  // Create a .env file based on .env.sample and fill in your API keys
+  "api_key": "",
+  "api_secret": "",
+
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+
+  "data_folder": "./DATA_ITB_1h",
+
+  "symbol": "BTCUSDT",
+  "feature_file_name": "features.csv",
+  "merge_file_name":   "data.csv",
+  "matrix_file_name":  "matrix.csv",
+  "predict_file_name": "predictions.csv",
+  "signal_file_name":  "signals.csv",
+  "signal_models_file_name": "signal_models",
+
+  "description": "BTCUSDT 1 hour strategy",
+  "freq": "1h",           // frequência Binance
+  "pandas_freq": "1h",  // frequência Pandas
+  "time_column": "timestamp",
+  "model_folder": "MODELS",
+
+  // === JANELAS E TAMANHOS ==================================================
+
+  "label_horizon":   24,     // 24h = 1 dia de horizonte
+  "features_horizon":24,
+  "train_length":    8760,   // ~1 ano de 1h (365 * 24)
+  "predict_length":  168,    // ~1 semana de 1h
+
+  "append_overlap_records": 5,
+
+  // === DOWNLOAD AND MERGE ==================================================
+
+  "data_sources": [
+    { "folder": "BTCUSDT", "file": "klines", "column_prefix": "" }
+  ],
+
+  "download_start": "2019-01-01",
+  "download_end":   null,
+
+
+  "merge_interpolate": false,
+
+  // === FEATURES (1h) =======================================================
+
+  "feature_sets": [
+    // Médias móveis (1h): 1d, 3d, 7d, 30d
+    {
+      "generator": "talib",
+      "config": { "columns": ["close"], "functions": ["SMA"], "windows": [24, 72, 168, 720] }
+    },
+    // Momentum
+    {
+      "generator": "talib",
+      "config": { "columns": ["close"], "functions": ["RSI"], "windows": [14] }
+    },
+    {
+      "generator": "talib",
+      "config": { "columns": ["close"], "functions": ["LINEARREG_SLOPE"], "windows": [24, 72, 168] }
+    },
+    // Volatilidade
+    {
+      "generator": "talib",
+      "config": { "columns": ["high","low","close"], "functions": ["ATR"], "windows": [14] }
+    },
+    {
+      "generator": "talib",
+      "config": { "columns": ["close"], "functions": ["STDDEV"], "windows": [24, 168] }
+    }
+  ],
+
+  // === LABELS (1h) =========================================================
+
+  "label_sets": [
+    {
+      "generator": "highlow2",
+      "config": {
+        "columns": ["close","high","low"],
+        "function": "high",
+        "thresholds": [2.0],
+        "tolerance": 0.2,
+        "horizon": 24,          // 24 candles de 1h (~24h)
+        "names": ["high_20_24"]
+      }
+    },
+    {
+      "generator": "highlow2",
+      "config": {
+        "columns": ["close","high","low"],
+        "function": "low",
+        "thresholds": [2.0],
+        "tolerance": 0.2,
+        "horizon": 24,
+        "names": ["low_20_24"]
+      }
+    }
+  ],
+
+  // === TREINO (1h) =========================================================
+
+  "train_feature_sets": [
+    { "generator": "train_features", "config": { } }
+  ],
+
+  "train_features": [
+    "close_SMA_24","close_SMA_72","close_SMA_168","close_SMA_720",
+    "close_RSI_14",
+    "close_LINEARREG_SLOPE_24","close_LINEARREG_SLOPE_72","close_LINEARREG_SLOPE_168",
+    "high_low_close_ATR_14","close_STDDEV_24","close_STDDEV_168"
+  ],
+
+  "labels": ["high_20_24","low_20_24"],
+
+  "algorithms": [
+    {
+        "name": "lc",
+        "algo": "lc",
+        "params": { "is_scale": true },
+        "train": { "penalty": "l2", "C": 1.0, "solver": "sag", "max_iter": 500 }
+    }
+    // {
+    //     "name":"lgbm",
+    //     "algo":"lgbm",
+    //     "params":{ },
+    //     "train":{"num_leaves":31,"learning_rate":0.05,"n_estimators":200,"max_depth":-1}
+    // }
+  ],
+
+  // === SINAIS ==============================================================
+
+  "signal_sets": [
+    {
+      "generator": "combine",
+      "config": {
+        "columns": ["high_20_24_lc","low_20_24_lc"],
+        "names": "trade_score",
+        "combine": "difference"
+      }
+    },
+    {
+      "generator": "threshold_rule",
+      "config": {
+        "columns": "trade_score",
+        "names": ["buy_signal","sell_signal"],
+        "parameters": {
+          "buy_signal_threshold": 0.005,
+          "sell_signal_threshold": -0.005
+        }
+      }
+    }
+  ],
+
+  // === SAÍDAS & NOTIFICAÇÕES =============================================
+
+  "output_sets": [
+    {
+      "generator": "score_notification_model",
+      "config": {
+        "score_notification": true,
+        "score_column_names": ["trade_score"]
+      }
+    },
+    {
+      "generator": "trader_simulation",
+      "config": {
+        "buy_signal_column": "buy_signal",
+        "sell_signal_column": "sell_signal"
+      }
+    }
+  ],
+
+  // === OTIMIZAÇÃO DE THRESHOLDS ===========================================
+
+  "simulate_model": {
+    "data_start": 0,
+    "data_end": null,
+    "direction": "long",
+    "topn_to_store": 10,
+    "signal_generator": "threshold_rule",
+    "buy_sell_equal": false,
+    "grid": {
+      "buy_signal_threshold":  [0.003, 0.005, 0.007],
+      "sell_signal_threshold": [-0.003, -0.005, -0.007]
+    }
+  }
+}
