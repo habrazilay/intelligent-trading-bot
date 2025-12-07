@@ -1,0 +1,64 @@
+name: "🔧 DevOps Task"
+description: "Infrastructure, CI/CD, Terraform, Docker, Cloud"
+labels: ["devops", "infrastructure"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## DevOps Task
+        Infrastructure, pipelines, cloud resources, monitoring.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: What type of DevOps work?
+      options:
+        - Terraform / IaC
+        - CI/CD Pipeline
+        - Docker / Container
+        - Azure
+        - GCP
+        - Monitoring / Logging
+        - Security
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What needs to be done?
+      placeholder: "Describe the infrastructure change..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: How do we know it's done?
+      placeholder: |
+        - [ ] Terraform plan shows no errors
+        - [ ] Pipeline runs successfully
+        - [ ] Documentation updated
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - dev
+        - staging
+        - prod
+        - all
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Links, docs, related issues
+      placeholder: "Links to docs, related PRs..."

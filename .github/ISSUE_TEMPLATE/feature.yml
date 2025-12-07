@@ -1,0 +1,58 @@
+name: "🚀 Feature Request"
+description: "New functionality, enhancement, improvement"
+labels: ["feature", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Feature Request
+        New functionality or enhancement to existing features.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the system?
+      options:
+        - Trading Bot / Server
+        - ML Pipeline
+        - Data Processing
+        - API / Integration
+        - Config / Settings
+        - UI / Dashboard
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What feature do you want?
+      placeholder: "Describe the feature..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why is this needed?
+      placeholder: "What problem does it solve?"
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: How do we know it's done?
+      placeholder: |
+        - [ ] Feature works as expected
+        - [ ] Tests pass
+        - [ ] Documentation updated
+
+  - type: textarea
+    id: technical
+    attributes:
+      label: Technical Notes
+      description: Implementation ideas, constraints
+      placeholder: "Any technical considerations..."

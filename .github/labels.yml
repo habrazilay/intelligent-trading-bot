@@ -1,0 +1,139 @@
+# =============================================================================
+# GitHub Labels - Intelligent Trading Bot
+# =============================================================================
+# Use: gh label create -f labels.yml (with GitHub CLI)
+# Or manually create in GitHub > Issues > Labels
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Work Type (Primary)
+# -----------------------------------------------------------------------------
+- name: devops
+  color: "d93f0b"  # orange
+  description: "Infrastructure, CI/CD, Terraform, Docker"
+
+- name: feature
+  color: "0e8a16"  # green
+  description: "New functionality or enhancement"
+
+- name: bug
+  color: "b60205"  # red
+  description: "Something isn't working"
+
+- name: research
+  color: "5319e7"  # purple
+  description: "R&D, ML experiments, analysis"
+
+# -----------------------------------------------------------------------------
+# Component
+# -----------------------------------------------------------------------------
+- name: infrastructure
+  color: "fbca04"  # yellow
+  description: "Cloud resources, Terraform"
+
+- name: ml
+  color: "d4c5f9"  # light purple
+  description: "Machine Learning, models, training"
+
+- name: pipeline
+  color: "c2e0c6"  # light green
+  description: "Data pipeline, merge, features, labels"
+
+- name: trading
+  color: "006b75"  # teal
+  description: "Trading logic, signals, orders"
+
+- name: config
+  color: "bfd4f2"  # light blue
+  description: "Configuration files, settings"
+
+# -----------------------------------------------------------------------------
+# Priority
+# -----------------------------------------------------------------------------
+- name: "priority: critical"
+  color: "b60205"  # red
+  description: "Must be fixed ASAP"
+
+- name: "priority: high"
+  color: "d93f0b"  # orange
+  description: "Important, do soon"
+
+- name: "priority: medium"
+  color: "fbca04"  # yellow
+  description: "Normal priority"
+
+- name: "priority: low"
+  color: "0e8a16"  # green
+  description: "Nice to have"
+
+# -----------------------------------------------------------------------------
+# Status
+# -----------------------------------------------------------------------------
+- name: "status: blocked"
+  color: "d73a4a"  # red
+  description: "Blocked by something"
+
+- name: "status: in-progress"
+  color: "0052cc"  # blue
+  description: "Currently being worked on"
+
+- name: "status: review"
+  color: "fbca04"  # yellow
+  description: "Ready for review"
+
+- name: "status: done"
+  color: "0e8a16"  # green
+  description: "Completed"
+
+# -----------------------------------------------------------------------------
+# Environment
+# -----------------------------------------------------------------------------
+- name: "env: dev"
+  color: "c5def5"  # light blue
+  description: "Development environment"
+
+- name: "env: staging"
+  color: "fef2c0"  # light yellow
+  description: "Staging environment"
+
+- name: "env: prod"
+  color: "f9d0c4"  # light red
+  description: "Production environment"
+
+# -----------------------------------------------------------------------------
+# Symbol (for trading-specific issues)
+# -----------------------------------------------------------------------------
+- name: "symbol: BTCUSDT"
+  color: "f7931a"  # bitcoin orange
+  description: "Related to BTCUSDT"
+
+- name: "symbol: ETHUSDT"
+  color: "627eea"  # ethereum purple
+  description: "Related to ETHUSDT"
+
+# -----------------------------------------------------------------------------
+# Other
+# -----------------------------------------------------------------------------
+- name: documentation
+  color: "0075ca"  # blue
+  description: "Documentation updates"
+
+- name: experiment
+  color: "d4c5f9"  # light purple
+  description: "ML experiment, testing hypothesis"
+
+- name: enhancement
+  color: "a2eeef"  # cyan
+  description: "Improvement to existing feature"
+
+- name: "good first issue"
+  color: "7057ff"  # purple
+  description: "Good for newcomers"
+
+- name: duplicate
+  color: "cfd3d7"  # gray
+  description: "Duplicate issue"
+
+- name: wontfix
+  color: "ffffff"  # white
+  description: "Won't be addressed"
