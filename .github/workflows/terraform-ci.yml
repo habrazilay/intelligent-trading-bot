@@ -1,0 +1,204 @@
+name: Terraform CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/**'
+  workflow_dispatch:
+    inputs:
+      cloud:
+        description: 'Cloud provider (azure, gcp, all)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - azure
+          - gcp
+          - all
+      environment:
+        description: 'Environment (dev, staging, prod)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      action:
+        description: 'Terraform action'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+env:
+  TF_VERSION: '1.6.0'
+  TF_IN_AUTOMATION: 'true'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Azure Terraform
+  # ---------------------------------------------------------------------------
+  azure:
+    name: Azure - ${{ github.event.inputs.environment || 'dev' }}
+    runs-on: ubuntu-latest
+    if: github.event.inputs.cloud == 'azure' || github.event.inputs.cloud == 'all' || github.event.inputs.cloud == ''
+
+    defaults:
+      run:
+        working-directory: infra/azure/terraform/envs/${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="binance_api_key=${{ secrets.BINANCE_API_KEY }}" \
+            -var="binance_api_secret=${{ secrets.BINANCE_API_SECRET }}" \
+            -var="telegram_bot_token=${{ secrets.TELEGRAM_BOT_TOKEN }}" \
+            -var="telegram_chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -out=tfplan \
+            -no-color
+        continue-on-error: true
+
+      - name: Comment Plan on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### Azure Terraform Plan 📋
+            \`\`\`
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+            *Pushed by: @${{ github.actor }}*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply' && github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve tfplan
+
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy' && github.ref == 'refs/heads/main'
+        run: |
+          terraform destroy \
+            -var="binance_api_key=${{ secrets.BINANCE_API_KEY }}" \
+            -var="binance_api_secret=${{ secrets.BINANCE_API_SECRET }}" \
+            -auto-approve
+
+  # ---------------------------------------------------------------------------
+  # GCP Terraform
+  # ---------------------------------------------------------------------------
+  gcp:
+    name: GCP - ${{ github.event.inputs.environment || 'dev' }}
+    runs-on: ubuntu-latest
+    if: github.event.inputs.cloud == 'gcp' || github.event.inputs.cloud == 'all' || github.event.inputs.cloud == ''
+
+    defaults:
+      run:
+        working-directory: infra/gcp/terraform/envs/${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="binance_api_key=${{ secrets.BINANCE_API_KEY }}" \
+            -var="binance_api_secret=${{ secrets.BINANCE_API_SECRET }}" \
+            -out=tfplan \
+            -no-color
+        continue-on-error: true
+
+      - name: Comment Plan on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### GCP Terraform Plan 📋
+            \`\`\`
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+            *Pushed by: @${{ github.actor }}*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Terraform Apply
+        if: github.event.inputs.action == 'apply' && github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve tfplan
+
+      - name: Terraform Destroy
+        if: github.event.inputs.action == 'destroy' && github.ref == 'refs/heads/main'
+        run: |
+          terraform destroy \
+            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
+            -var="binance_api_key=${{ secrets.BINANCE_API_KEY }}" \
+            -var="binance_api_secret=${{ secrets.BINANCE_API_SECRET }}" \
+            -auto-approve

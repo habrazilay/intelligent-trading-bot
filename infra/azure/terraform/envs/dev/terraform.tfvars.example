@@ -1,0 +1,24 @@
+# -----------------------------------------------------------------------------
+# Azure Configuration
+# Copy this file to terraform.tfvars and fill in your values
+# -----------------------------------------------------------------------------
+
+# Project naming
+project_name = "itb-dev"
+
+# Region
+location = "eastus"
+
+# -----------------------------------------------------------------------------
+# Secrets (NEVER commit real values!)
+# Option 1: Set here (for local dev only)
+# Option 2: Use TF_VAR_binance_api_key env variable
+# Option 3: Use -var flag: terraform apply -var="binance_api_key=xxx"
+# -----------------------------------------------------------------------------
+
+binance_api_key    = "your-binance-api-key"
+binance_api_secret = "your-binance-api-secret"
+
+# Optional - Telegram notifications
+telegram_bot_token = ""
+telegram_chat_id   = ""
