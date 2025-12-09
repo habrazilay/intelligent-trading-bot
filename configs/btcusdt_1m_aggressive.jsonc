@@ -43,7 +43,7 @@
 
   // REUSE: features.csv and data.csv (if compatible)
   // NEW: matrix.csv (different labels), predictions, signals
-  "feature_file_name": "features.csv",          // Can reuse if same features
+  "feature_file_name": "features_agressive.csv",          // Can reuse if same features
   "merge_file_name": "data.csv",                // Can reuse (klines merge)
   "matrix_file_name": "matrix_aggressive.csv",  // NEW - different labels
   "predict_file_name": "predictions_aggressive.csv",  // NEW
