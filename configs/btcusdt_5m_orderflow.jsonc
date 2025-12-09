@@ -47,6 +47,18 @@ Usage:
   },
 
   // ============================================================================
+  // ORDER BOOK DATA COLLECTION (Optional)
+  // ============================================================================
+  //
+  // Configuration for collect_orderbook.py script
+  // Usage: python scripts/collect_orderbook.py -c configs/btcusdt_5m_orderflow.jsonc
+  //
+  "orderbook_collection": {
+    "duration": "7d",        // How long to collect (7 days for full backtest)
+    "save_interval": "6h"    // Save to disk every 6 hours
+  },
+
+  // ============================================================================
   // LABELS - AGGRESSIVE SCALPING TARGETS
   // ============================================================================
   //

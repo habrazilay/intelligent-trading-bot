@@ -5,8 +5,18 @@ Binance Order Book Collector
 Streams real-time order book data via WebSocket and saves to Parquet files.
 This data will be used to extract order flow features for improved trading predictions.
 
+This script complements download_binance.py:
+- download_binance.py: Downloads historical OHLCV data (REST API, one-time)
+- collect_orderbook.py: Collects real-time L2 order book data (WebSocket, continuous)
+
 Usage:
+    # From command line
     python scripts/collect_orderbook.py --symbol BTCUSDT --duration 24h
+
+    # From config file (similar to download_binance.py)
+    python scripts/collect_orderbook.py --config configs/btcusdt_5m_orderflow.jsonc
+
+    # Custom output directory
     python scripts/collect_orderbook.py --symbol BTCUSDT --output DATA_ORDERBOOK/
 """
 
@@ -15,11 +25,31 @@ import json
 import time
 import signal
 import sys
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from collections import deque
 import pandas as pd
 from binance import ThreadedWebsocketManager
+
+# Reuse existing utilities
+try:
+    from service.App import load_config, App
+    HAS_APP = True
+except ImportError:
+    HAS_APP = False
+
+# Configure logging (similar to download_binance.py)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("collect_orderbook.log", mode="w", encoding="utf-8"),
+    ],
+)
+log = logging.getLogger(__name__)
 
 # Global state
 orderbook_snapshots = deque(maxlen=100000)  # Keep last 100k snapshots in memory
@@ -130,7 +160,11 @@ def handle_orderbook_update(msg):
 
 
 def save_snapshots_to_parquet(output_dir, symbol):
-    """Save collected snapshots to Parquet file"""
+    """
+    Save collected snapshots to Parquet file
+
+    Reuses same Parquet format as download_binance.py (snappy compression)
+    """
     global orderbook_snapshots, stats
 
     if not orderbook_snapshots:
@@ -145,20 +179,23 @@ def save_snapshots_to_parquet(output_dir, symbol):
         filename = f"{symbol}_orderbook_{timestamp}.parquet"
         filepath = output_dir / filename
 
-        # Save to Parquet
+        # Ensure directory exists (same pattern as download_binance.py)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        # Save to Parquet with snappy compression (same as download_binance.py)
         df.to_parquet(filepath, compression='snappy', index=False)
 
         stats['files_written'] += 1
         stats['last_save_time'] = datetime.now()
 
-        print(f"\n💾 Saved {len(df)} snapshots to {filename}")
-        print(f"   File size: {filepath.stat().st_size / 1024 / 1024:.2f} MB")
+        log.info("Saved %d snapshots to %s (%.2f MB)",
+                 len(df), filename, filepath.stat().st_size / 1024 / 1024)
 
         # Clear buffer after saving
         orderbook_snapshots.clear()
 
     except Exception as e:
-        print(f"❌ Error saving to Parquet: {e}")
+        log.error("Error saving to Parquet: %s", e)
 
 
 def collect_orderbook(symbol='BTCUSDT', duration_seconds=86400, output_dir='DATA_ORDERBOOK',
@@ -255,59 +292,88 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Collect for 24 hours, save every hour
+  # Using command-line arguments:
   python scripts/collect_orderbook.py --symbol BTCUSDT --duration 24h
-
-  # Collect for 7 days, save every 6 hours
   python scripts/collect_orderbook.py --symbol BTCUSDT --duration 7d --save-interval 6h
 
-  # Quick test: collect for 5 minutes
+  # Using config file (like download_binance.py):
+  python scripts/collect_orderbook.py --config configs/btcusdt_5m_orderflow.jsonc
+
+  # Quick test:
   python scripts/collect_orderbook.py --symbol BTCUSDT --duration 5m --save-interval 1m
         """
+    )
+
+    # Config file option (like download_binance.py)
+    parser.add_argument(
+        '--config',
+        '-c',
+        type=str,
+        help='JSONC configuration file (alternative to CLI args)'
     )
 
     parser.add_argument(
         '--symbol',
         type=str,
-        default='BTCUSDT',
-        help='Trading pair symbol (default: BTCUSDT)'
+        help='Trading pair symbol (default: from config or BTCUSDT)'
     )
 
     parser.add_argument(
         '--duration',
         type=str,
-        default='24h',
         help='Collection duration (e.g., 30m, 24h, 7d) (default: 24h)'
     )
 
     parser.add_argument(
         '--output',
         type=str,
-        default='DATA_ORDERBOOK',
-        help='Output directory (default: DATA_ORDERBOOK)'
+        help='Output directory (default: DATA_ORDERBOOK or from config)'
     )
 
     parser.add_argument(
         '--save-interval',
         type=str,
-        default='1h',
         help='How often to save to disk (e.g., 30m, 1h) (default: 1h)'
     )
 
     args = parser.parse_args()
 
+    # Determine parameters from config file or CLI args
+    if args.config:
+        if not HAS_APP:
+            log.error("Config file requires service.App module")
+            sys.exit(1)
+
+        # Load config (same as download_binance.py)
+        load_config(args.config)
+        symbol = args.symbol or App.config.get('symbol', 'BTCUSDT')
+        output_dir = args.output or f"DATA_ORDERBOOK_{symbol}"
+
+        # Get duration from config if specified
+        duration_str = args.duration or App.config.get('orderbook_collection', {}).get('duration', '24h')
+        save_interval_str = args.save_interval or App.config.get('orderbook_collection', {}).get('save_interval', '1h')
+
+        log.info("Loaded config from %s", args.config)
+        log.info("Symbol: %s, Duration: %s, Save interval: %s", symbol, duration_str, save_interval_str)
+    else:
+        # Use CLI args with defaults
+        symbol = args.symbol or 'BTCUSDT'
+        duration_str = args.duration or '24h'
+        output_dir = args.output or 'DATA_ORDERBOOK'
+        save_interval_str = args.save_interval or '1h'
+
     # Parse durations
-    duration_seconds = parse_duration(args.duration)
-    save_interval = parse_duration(args.save_interval)
+    duration_seconds = parse_duration(duration_str)
+    save_interval = parse_duration(save_interval_str)
 
     # Setup signal handler
     signal.signal(signal.SIGINT, signal_handler)
 
     # Run collector
     collect_orderbook(
-        symbol=args.symbol,
+        symbol=symbol,
         duration_seconds=duration_seconds,
-        output_dir=args.output,
+        output_dir=output_dir,
         save_interval=save_interval
     )
 
