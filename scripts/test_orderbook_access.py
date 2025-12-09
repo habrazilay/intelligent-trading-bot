@@ -268,7 +268,9 @@ def main():
     print_summary()
 
     # Save results
-    with open('/home/user/intelligent-trading-bot/orderbook_test_results.json', 'w') as f:
+    import os
+    result_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'orderbook_test_results.json')
+    with open(result_path, 'w') as f:
         json.dump({
             'rest_api_works': rest_works,
             'websocket_works': ws_works,
