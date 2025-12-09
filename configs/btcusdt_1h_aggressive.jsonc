@@ -239,5 +239,26 @@
         "sell_trade_signals": ["sell_signal_aggressive"]
       }
     }
-  ]
+  ],
+
+  // === THRESHOLD OPTIMIZATION ================================================
+
+  "simulate_model": {
+    "data_start": 0,
+    "data_end": null,
+    "direction": "long",
+    "topn_to_store": 10,
+    "signal_generator": "threshold_rule",
+    "buy_sell_equal": false,
+
+    // Grid search for optimal 1h thresholds
+    "grid": {
+      "buy_signal_threshold": [0.008, 0.010, 0.012, 0.015],
+      "sell_signal_threshold": [-0.008, -0.010, -0.015]
+    },
+
+    "score_column_name": "trade_score_aggressive",
+    "buy_signal_column_name": "buy_signal_aggressive",
+    "sell_signal_column_name": "sell_signal_aggressive"
+  }
 }
