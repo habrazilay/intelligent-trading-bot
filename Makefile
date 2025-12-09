@@ -175,6 +175,22 @@ dev-5m:
 	@echo ">> rodar pipeline dev 5m"
 	$(MAKE) pipeline CONFIG=configs/btcusdt_5m_dev.jsonc
 
+dev-1m-lgbm:
+	@echo ">> rodar pipeline dev 1m (LGBM)"
+	$(MAKE) pipeline CONFIG=configs/btcusdt_1m_dev_lgbm.jsonc
+
+train-1m-lgbm:
+	@echo ">> treinar modelos 1m (LGBM)"
+	$(MAKE) train CONFIG=configs/btcusdt_1m_dev_lgbm.jsonc
+
+predict-1m-lgbm:
+	@echo ">> rodar predict 1m (LGBM)"
+	$(MAKE) predict CONFIG=configs/btcusdt_1m_dev_lgbm.jsonc
+
+signals-1m-lgbm:
+	@echo ">> gerar sinais 1m (LGBM)"
+	$(MAKE) signals CONFIG=configs/btcusdt_1m_dev_lgbm.jsonc
+
 # =============================================================================
 # Analysis
 # =============================================================================

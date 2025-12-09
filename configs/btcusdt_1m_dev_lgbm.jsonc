@@ -20,11 +20,11 @@
   "feature_file_name": "features.csv",
   "merge_file_name":   "data.csv",
   "matrix_file_name":  "matrix.csv",
-  "predict_file_name": "predictions.csv",
-  "signal_file_name":  "signals.csv",
-  "signal_models_file_name": "signal_models",
+  "predict_file_name": "predictions_lgbm.csv",
+  "signal_file_name": "signals_lgbm.csv",
+  "signal_models_file_name": "signal_models_lgbm",
 
-  "model_folder": "MODELS",
+  "model_folder": "MODELS_LGBM_V1",
   "description": "BTCUSDT 1 min strategy",
   "freq": "1m",           // frequência Binance
   "pandas_freq": "1min",  // frequência Pandas
@@ -128,14 +128,6 @@
   "labels": ["high_05_60","low_05_60"],
 
   "algorithms": [
-    // Logistic Regression (baseline)
-    {
-      "name":"lc",
-      "algo":"lc",
-      "params":{"is_scale":true},
-      "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":1000}
-    },
-
     //LightGBM – bom para tabular, não exige scaling
     {
       "name":"lgbm",
@@ -152,20 +144,20 @@
     {
       "generator":"combine",
       "config":{
-        "columns":["high_05_60_lc","low_05_60_lc"],
-        "names":"trade_score",
+        "columns":["high_05_60_lgbm","low_05_60_lgbm"],
+        "names":"trade_score_lgbm",
         "combine":"difference"
       }
     },
     // Transforma score em buy/sell boolean
     {
-      "generator":"threshold_rule",
-      "config":{
-        "columns":"trade_score",
-        "names":["buy_signal","sell_signal"],
-        "parameters":{
-          "buy_signal_threshold": 0.003,
-          "sell_signal_threshold": -0.003
+    "generator":"threshold_rule",
+    "config":{
+      "columns":"trade_score_lgbm",
+      "names":["buy_signal_lgbm","sell_signal_lgbm"],
+      "parameters":{
+        "buy_signal_threshold": 0.003,
+        "sell_signal_threshold": -0.003
         }
       }
     }
