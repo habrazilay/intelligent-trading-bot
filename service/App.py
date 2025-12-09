@@ -94,27 +94,48 @@ def problems_exist():
     return False
 
 
-def load_config(config_file):
-    if config_file:
-        config_file_path = PACKAGE_ROOT / config_file
-        with open(config_file_path, encoding='utf-8') as json_file:
-            #conf_str = json.load(json_file)
-            conf_str = json_file.read()
+def load_config(config_file: str) -> None:
+    """Load a JSON/JSONC config file into App.config and overlay env secrets.
 
-            # Remove everything starting with // and till the line end
-            conf_str = re.sub(r"//.*$", "", conf_str, flags=re.M)
+    - Reads the given JSON/JSONC file (supports // comments)
+    - Replaces App.config entirely with the file content
+    - If BINANCE_API_KEY / BINANCE_API_SECRET are set in the environment and
+      the config does not define them, they are injected.
+    """
+    if not config_file:
+        # No file provided: leave as-is (caller may fill App.config manually)
+        return
 
-            conf_json = json.loads(conf_str)
-            # Replace the in-memory config entirely with the JSON config file.
-            App.config = conf_json
+    # Resolve path relative to project root
+    config_file_path = PACKAGE_ROOT / config_file
+    if not config_file_path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_file_path}")
 
-            # If API key/secret are not set in config, fall back to environment variables.
-            api_key_env = os.getenv("BINANCE_API_KEY")
-            api_secret_env = os.getenv("BINANCE_API_SECRET")
-            if api_key_env and not App.config.get("api_key"):
-                App.config["api_key"] = api_key_env
-            if api_secret_env and not App.config.get("api_secret"):
-                App.config["api_secret"] = api_secret_env
+    with open(config_file_path, encoding="utf-8") as f:
+        raw = f.read()
+
+    # Strip // comments to support JSONC-style configs
+    conf_str = re.sub(r"//.*$", "", raw, flags=re.M)
+
+    try:
+        conf_json = json.loads(conf_str)
+    except Exception as e:
+        raise RuntimeError(f"Erro ao parsear JSON de '{config_file_path}': {e}")
+
+    # Replace the in-memory config entirely with the JSON config
+    App.config = conf_json
+
+    # If API key/secret are not set in config, fall back to environment variables
+    api_key_env = os.getenv("BINANCE_API_KEY")
+    api_secret_env = os.getenv("BINANCE_API_SECRET")
+    if api_key_env and not App.config.get("api_key"):
+        App.config["api_key"] = api_key_env
+    if api_secret_env and not App.config.get("api_secret"):
+        App.config["api_secret"] = api_secret_env
+
+    # Ensure we have a default time_column if missing
+    if not App.config.get("time_column"):
+        App.config["time_column"] = "timestamp"
 
 
 if __name__ == "__main__":
