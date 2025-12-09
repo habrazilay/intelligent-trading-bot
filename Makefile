@@ -8,7 +8,8 @@
 .PHONY: help setup setup-azure setup-gcp setup-project docker-build docker-push \
         download train predict pipeline clean validate-configs \
         infra-dev-apply image-dev dev-1m dev-5m analyze-1m \
-        upload-1m upload-5m upload-1h staging-1m staging-5m shadow-1m shadow-5m
+        upload-1m upload-5m upload-1h staging-1m staging-5m shadow-1m shadow-5m \
+        analyze-staging analyze-staging-high-capital analyze-staging-custom
 
 # Default target
 help:
@@ -53,6 +54,11 @@ help:
 	@echo "  Staging:"
 	@echo "    make staging-1m       - Run staging 1m (shadow mode)"
 	@echo "    make staging-5m       - Run staging 5m (shadow mode)"
+	@echo ""
+	@echo "  Shadow Mode Analysis:"
+	@echo "    make analyze-staging            - Analyze shadow mode logs (V4)"
+	@echo "    make analyze-staging-high-capital - Analyze with $10K capital"
+	@echo "    make analyze-staging-custom     - Custom: LOG_FILE=... CAPITAL=... RISK=..."
 	@echo ""
 	@echo "  Utilities:"
 	@echo "    make validate         - Validate all configs"
@@ -254,6 +260,32 @@ clean:
 test:
 	@echo "Running tests..."
 	python -m pytest tests/ -v || echo "No tests found"
+
+# =============================================================================
+# Shadow Mode Analysis
+# =============================================================================
+
+analyze-staging:
+	@echo "Analyzing shadow mode logs (V4 - Production Ready)..."
+	python my_tests/analyze_staging_logs_v4.py --log-file server.log
+
+analyze-staging-high-capital:
+	@echo "Analyzing shadow mode with $10,000 starting capital..."
+	python my_tests/analyze_staging_logs_v4.py \
+		--log-file server.log \
+		--starting-capital 10000 \
+		--risk-per-trade 1.5
+
+analyze-staging-custom:
+	@echo "Analyzing custom log file..."
+	@if [ -z "$(LOG_FILE)" ]; then \
+		echo "Error: LOG_FILE not specified. Usage: make analyze-staging-custom LOG_FILE=path/to/server.log"; \
+		exit 1; \
+	fi
+	python my_tests/analyze_staging_logs_v4.py \
+		--log-file $(LOG_FILE) \
+		--starting-capital $(or $(CAPITAL),1000) \
+		--risk-per-trade $(or $(RISK),1.0)
 
 # =============================================================================
 # Multi-symbol operations
