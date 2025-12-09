@@ -231,7 +231,6 @@
   "labels": ["high_020_10", "low_020_10"],
 
   "algorithms": [
-    // LightGBM - Best for tabular data
     {
       "name": "lgbm",  // ⚠️ NO UNDERSCORES! System uses "_" as separator
       "algo": "lgbm",
@@ -244,19 +243,6 @@
         "min_child_samples": 20,    // Prevent overfitting
         "subsample": 0.8,            // Row sampling
         "colsample_bytree": 0.8      // Feature sampling
-      }
-    },
-
-    // Logistic Classifier - Baseline for comparison
-    {
-      "name": "lc",
-      "algo": "lc",
-      "params": {"is_scale": true},
-      "train": {
-        "penalty": "l2",
-        "C": 1.0,
-        "solver": "sag",
-        "max_iter": 500
       }
     }
   ],
@@ -271,43 +257,24 @@
   // ============================================================================
 
   "signal_sets": [
-    // LGBM signals
+    // Combine predictions into single score
     {
       "generator": "combine",
       "config": {
         "columns": ["high_020_10_lgbm", "low_020_10_lgbm"],
-        "names": "trade_score_lgbm",
+        "names": "trade_score_aggressive",
         "combine": "difference"
-      }
-    },
-    {
-      "generator": "threshold_rule",
-      "config": {
-        "columns": "trade_score_lgbm",
-        "names": ["buy_signal_lgbm", "sell_signal_lgbm"],
-        "parameters": {
-          "buy_signal_threshold": 0.01,
-          "sell_signal_threshold": -0.01
-        }
       }
     },
 
-    // LC signals (for comparison)
-    {
-      "generator": "combine",
-      "config": {
-        "columns": ["high_020_10_lc", "low_020_10_lc"],
-        "names": "trade_score_lc",
-        "combine": "difference"
-      }
-    },
+    // Convert score to buy/sell signals (AGGRESSIVE THRESHOLDS)
     {
       "generator": "threshold_rule",
       "config": {
-        "columns": "trade_score_lc",
-        "names": ["buy_signal_lc", "sell_signal_lc"],
+        "columns": "trade_score_aggressive",
+        "names": ["buy_signal_aggressive", "sell_signal_aggressive"],
         "parameters": {
-          "buy_signal_threshold": 0.01,
+          "buy_signal_threshold": 0.01,   // 3x more sensitive than conservative
           "sell_signal_threshold": -0.01
         }
       }
@@ -322,7 +289,7 @@
       "generator": "score_notification_model",
       "config": {
         "score_notification": true,
-        "score_column_names": ["trade_score_lgbm", "trade_score_lc"]
+        "score_column_names": ["trade_score_aggressive"]
       }
     },
 

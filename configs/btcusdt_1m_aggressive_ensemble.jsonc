@@ -17,16 +17,16 @@
   "telegram_bot_token": "",
   "telegram_chat_id": "",
 
-  "data_folder": "./DATA_ITB_1m_aggressive_ensemble",
+  "data_folder": "./DATA_ITB_1m",  // REUSE data from aggressive mode!
   "symbol": "BTCUSDT",
-  "feature_file_name": "features.csv",
+  "feature_file_name": "features_agressive.csv",  // Same features as aggressive
   "merge_file_name": "data.csv",
-  "matrix_file_name": "matrix.csv",
+  "matrix_file_name": "matrix_aggressive.csv",    // Same labels as aggressive
   "predict_file_name": "predictions_ensemble.csv",
   "signal_file_name": "signals_ensemble.csv",
   "signal_models_file_name": "signal_models_ensemble",
 
-  "model_folder": "MODELS_AGGRESSIVE_ENSEMBLE",
+  "model_folder": "MODELS_ENSEMBLE",
   "description": "BTCUSDT 1m aggressive - LC (baseline) + LGBM (production) comparison",
   "freq": "1m",
   "pandas_freq": "1min",
@@ -118,7 +118,7 @@
     // - Linear decision boundary
     // - Needs feature scaling
     {
-      "name": "lc_baseline",
+      "name": "lc",  // NO UNDERSCORES! System uses "_" as separator
       "algo": "lc",
       "params": {"is_scale": true},  // IMPORTANT: LC requires scaling!
       "train": {
@@ -136,7 +136,7 @@
     // - Captures non-linear interactions
     // - No scaling needed
     {
-      "name": "lgbm_production",
+      "name": "lgbm",  // NO UNDERSCORES! System uses "_" as separator
       "algo": "lgbm",
       "params": {},  // No scaling needed!
       "train": {
@@ -165,7 +165,7 @@
     {
       "generator": "combine",
       "config": {
-        "columns": ["high_020_10_lc_baseline", "low_020_10_lc_baseline"],
+        "columns": ["high_020_10_lc", "low_020_10_lc"],
         "names": "trade_score_lc",
         "combine": "difference"
       }
@@ -186,7 +186,7 @@
     {
       "generator": "combine",
       "config": {
-        "columns": ["high_020_10_lgbm_production", "low_020_10_lgbm_production"],
+        "columns": ["high_020_10_lgbm", "low_020_10_lgbm"],
         "names": "trade_score_lgbm",
         "combine": "difference"
       }
