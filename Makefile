@@ -8,7 +8,7 @@
 .PHONY: help setup setup-azure setup-gcp setup-project docker-build docker-push \
         download train predict pipeline clean validate-configs \
         infra-dev-apply image-dev dev-1m dev-5m analyze-1m \
-        upload-1m upload-5m upload-1h staging-1m staging-5m
+        upload-1m upload-5m upload-1h staging-1m staging-5m shadow-1m shadow-5m
 
 # Default target
 help:
@@ -212,6 +212,26 @@ staging-1m:
 staging-5m:
 	@echo ">> staging 5m (shadow mode)"
 	ENABLE_LIVE_TRADING=true python -m service.server -c configs/btcusdt_5m_staging_v2.jsonc
+
+# =============================================================================
+# Shadow Mode (Local with raw logs)
+# =============================================================================
+
+shadow-1m:
+	@echo ">> shadow 1m (server + raw logs)"
+	@mkdir -p logs/raw
+	@TS=$$(date +"%Y-%m-%d_%H-%M"); \
+	LOG_FILE=logs/raw/server_1m_shadow_$${TS}.log; \
+	echo ">> logging to $$LOG_FILE"; \
+	ENABLE_LIVE_TRADING=0 python -m service.server -c configs/btcusdt_1m_staging_v2.jsonc 2>&1 | tee $$LOG_FILE
+
+shadow-5m:
+	@echo ">> shadow 5m (server + raw logs)"
+	@mkdir -p logs/raw
+	@TS=$$(date +"%Y-%m-%d_%H-%M"); \
+	LOG_FILE=logs/raw/server_5m_shadow_$${TS}.log; \
+	echo ">> logging to $$LOG_FILE"; \
+	ENABLE_LIVE_TRADING=0 python -m service.server -c configs/btcusdt_5m_staging_v2.jsonc 2>&1 | tee $$LOG_FILE
 
 # =============================================================================
 # Utilities
