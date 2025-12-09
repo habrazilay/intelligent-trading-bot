@@ -141,25 +141,40 @@ def _validate_label_distribution(df: pd.DataFrame, label_names: List[str], thres
     print("-" * 80)
 
 
-def add_regime_features(df: pd.DataFrame, atr_column: str = "high_low_close_ATR_14") -> pd.DataFrame:
+def add_regime_features(df: pd.DataFrame, gen_config: dict, config: dict, model_store) -> tuple[pd.DataFrame, list[str]]:
     """
     Add market regime features to help model adapt strategy.
+
+    ITB Generator compatible function.
 
     Regimes:
         - vol_regime: 0 (low vol), 1 (medium vol), 2 (high vol)
         - Based on ATR percentile ranking
 
     Args:
-        df: DataFrame with ATR column
-        atr_column: Name of ATR column to use
+        df: DataFrame with OHLCV data
+        gen_config: Generator config dict (expects 'atr_column' key)
+        config: Global config dict
+        model_store: Model store instance
 
     Returns:
-        df: DataFrame with new 'vol_regime' column
+        (df, feature_names): Modified DataFrame and list of created features
+
+    Config example:
+        {
+            "generator": "common.gen_labels_aggressive:add_regime_features",
+            "config": {
+                "atr_column": "high_low_close_ATR_14"
+            }
+        }
     """
+
+    # Get ATR column from config, default to standard name
+    atr_column = gen_config.get('atr_column', 'high_low_close_ATR_14')
 
     if atr_column not in df.columns:
         print(f"⚠️  Warning: ATR column '{atr_column}' not found. Skipping regime detection.")
-        return df
+        return df, []
 
     # Calculate ATR as % of price
     if 'close' in df.columns:
@@ -192,25 +207,40 @@ def add_regime_features(df: pd.DataFrame, atr_column: str = "high_low_close_ATR_
     print(f"   Medium Vol (1): {regime_counts.get(1, 0):>6} samples ({regime_counts.get(1, 0)/total*100:>5.1f}%)")
     print(f"   High Vol (2):   {regime_counts.get(2, 0):>6} samples ({regime_counts.get(2, 0)/total*100:>5.1f}%)")
 
-    return df
+    return df, ['vol_regime']
 
 
-def add_spread_features(df: pd.DataFrame, windows: List[int] = [3, 5, 10]) -> pd.DataFrame:
+def add_spread_features(df: pd.DataFrame, gen_config: dict, config: dict, model_store) -> tuple[pd.DataFrame, list[str]]:
     """
     Add high-low spread features for microstructure analysis.
     Useful for detecting volatility and liquidity conditions.
 
+    ITB Generator compatible function.
+
     Args:
-        df: DataFrame with 'high' and 'low' columns
-        windows: Rolling windows to calculate average spread
+        df: DataFrame with 'high', 'low', 'close' columns
+        gen_config: Generator config dict (expects 'windows' key)
+        config: Global config dict
+        model_store: Model store instance
 
     Returns:
-        df: DataFrame with new spread features
+        (df, feature_names): Modified DataFrame and list of created features
+
+    Config example:
+        {
+            "generator": "common.gen_labels_aggressive:add_spread_features",
+            "config": {
+                "windows": [3, 5, 10]
+            }
+        }
     """
+
+    # Get windows from config, default to [3, 5, 10]
+    windows = gen_config.get('windows', [3, 5, 10])
 
     if 'high' not in df.columns or 'low' not in df.columns or 'close' not in df.columns:
         print("⚠️  Warning: Missing required columns for spread features")
-        return df
+        return df, []
 
     # Candle spread as % of close
     spread_pct = ((df['high'] - df['low']) / df['close']) * 100
@@ -223,7 +253,7 @@ def add_spread_features(df: pd.DataFrame, windows: List[int] = [3, 5, 10]) -> pd
 
     print(f"✅ Spread features added: {features_added}")
 
-    return df
+    return df, features_added
 
 
 if __name__ == "__main__":
