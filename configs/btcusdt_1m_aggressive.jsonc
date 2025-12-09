@@ -261,7 +261,7 @@
     {
       "generator": "combine",
       "config": {
-        "columns": ["high_020_10_lgbm_aggressive", "low_020_10_lgbm_aggressive"],
+        "columns": ["high_020_10_lgbm", "low_020_10_lgbm"],
         "names": "trade_score_aggressive",
         "combine": "difference"
       }
