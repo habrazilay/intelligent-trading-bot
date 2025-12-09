@@ -20,35 +20,42 @@ from typing import List, Dict
 from common.gen_labels_highlow import first_cross_labels
 
 
-def generate_labels_aggressive(df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, List[str]]:
+def generate_labels_aggressive(df: pd.DataFrame, gen_config: dict, config: dict, model_store) -> tuple[pd.DataFrame, List[str]]:
     """
     Generate aggressive short-term labels for scalping strategies.
 
+    ITB Generator compatible function.
+
     Args:
         df: DataFrame with OHLCV data
-        config: Configuration dict with:
+        gen_config: Generator config dict with:
             - columns: [close, high, low]
             - function: 'high' or 'low'
             - thresholds: List of % targets (e.g., [0.15, 0.20, 0.25, 0.30])
             - tolerance: Max acceptable opposite move (e.g., 0.05 = 0.05%)
             - horizon: Candles to look forward (e.g., 10-20 for 1m)
             - names: Output column names
+        config: Global config dict
+        model_store: Model store instance
 
     Returns:
         (df, label_names): Modified DataFrame and list of created label columns
 
     Example config:
         {
-            "columns": ["close", "high", "low"],
-            "function": "high",
-            "thresholds": [0.15, 0.20, 0.25, 0.30],
-            "tolerance": 0.05,
-            "horizon": 10,
-            "names": ["high_015_10", "high_020_10", "high_025_10", "high_030_10"]
+            "generator": "common.gen_labels_aggressive:generate_labels_aggressive",
+            "config": {
+                "columns": ["close", "high", "low"],
+                "function": "high",
+                "thresholds": [0.15, 0.20, 0.25, 0.30],
+                "tolerance": 0.05,
+                "horizon": 10,
+                "names": ["high_015_10", "high_020_10", "high_025_10", "high_030_10"]
+            }
         }
     """
 
-    column_names = config.get('columns')
+    column_names = gen_config.get('columns')
     if not column_names or len(column_names) != 3:
         raise ValueError("Aggressive labels require exactly 3 columns: [close, high, low]")
 
@@ -56,13 +63,13 @@ def generate_labels_aggressive(df: pd.DataFrame, config: dict) -> tuple[pd.DataF
     high_column = column_names[1]
     low_column = column_names[2]
 
-    function = config.get('function')
+    function = gen_config.get('function')
     if function not in ['high', 'low']:
         raise ValueError(f"Function must be 'high' or 'low', got: {function}")
 
-    tolerance = config.get('tolerance', 0.05)  # Default 0.05% tolerance
+    tolerance = gen_config.get('tolerance', 0.05)  # Default 0.05% tolerance
 
-    thresholds = config.get('thresholds')
+    thresholds = gen_config.get('thresholds')
     if not isinstance(thresholds, list):
         thresholds = [thresholds]
 
@@ -77,11 +84,11 @@ def generate_labels_aggressive(df: pd.DataFrame, config: dict) -> tuple[pd.DataF
     # Calculate tolerances (opposite sign of threshold)
     tolerances = [round(-t * tolerance, 6) for t in thresholds]
 
-    horizon = config.get('horizon')
+    horizon = gen_config.get('horizon')
     if not horizon:
         raise ValueError("Horizon (number of candles) is required")
 
-    names = config.get('names')
+    names = gen_config.get('names')
     if not names or len(names) != len(thresholds):
         raise ValueError(f"Must provide one name per threshold. Got {len(names)} names for {len(thresholds)} thresholds")
 
