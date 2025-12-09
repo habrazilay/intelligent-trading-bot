@@ -90,13 +90,20 @@ def train_lgbm(df_X, df_y, model_config: dict):
 
     # Train model
     n_estimators = train_conf.get('n_estimators', 100)
+
+    # Debug logging
+    print(f"  → Training LGBM: {len(y_train)} samples, {X_train.shape[1] if hasattr(X_train, 'shape') else len(X_train[0])} features, {n_estimators} estimators")
+    print(f"  → Class balance: {sum(y_train)}/{len(y_train)} = {100*sum(y_train)/len(y_train):.2f}% positive")
+
     model = lgbm.train(
         lgbm_params,
         train_data,
         num_boost_round=n_estimators,
         valid_sets=[train_data],
-        callbacks=[lgbm.log_evaluation(period=0)]  # Suppress training output
+        callbacks=[lgbm.log_evaluation(period=50)]  # Show progress every 50 iterations
     )
+
+    print(f"  → LGBM training completed. Best iteration: {model.best_iteration}")
 
     return (model, scaler)
 
