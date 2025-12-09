@@ -11,7 +11,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC, SVR
 
-# import lightgbm as lgbm
+try:
+    import lightgbm as lgbm
+    LGBM_AVAILABLE = True
+except ImportError:
+    LGBM_AVAILABLE = False
+    print("⚠️  Warning: lightgbm not installed. Install with: pip install lightgbm")
 
 import tensorflow as tf
 from tensorflow import keras
@@ -22,7 +27,114 @@ from keras.regularizers import *
 from keras.callbacks import *
 
 #
-# GB
+# LGBM - LightGBM (Gradient Boosting)
+#
+
+def train_predict_lgbm(df_X, df_y, df_X_test, model_config: dict):
+    """
+    Train LightGBM model and return predictions for test data.
+    """
+    model_pair = train_lgbm(df_X, df_y, model_config)
+    y_test_hat = predict_lgbm(model_pair, df_X_test, model_config)
+    return y_test_hat
+
+
+def train_lgbm(df_X, df_y, model_config: dict):
+    """
+    Train LightGBM model with specified hyper-parameters.
+
+    Returns: (model, scaler) tuple
+    """
+    if not LGBM_AVAILABLE:
+        raise ImportError("lightgbm not installed. Run: pip install lightgbm")
+
+    params = model_config.get("params", {})
+    is_scale = params.get("is_scale", False)  # LGBM doesn't need scaling
+
+    # Scale (optional, usually not needed for LGBM)
+    if is_scale:
+        scaler = StandardScaler()
+        scaler.fit(df_X)
+        X_train = scaler.transform(df_X)
+    else:
+        scaler = None
+        X_train = df_X.values
+
+    y_train = df_y.values
+
+    # Get training parameters
+    train_conf = model_config.get("train", {})
+
+    # LightGBM parameters
+    lgbm_params = {
+        'objective': 'binary',  # binary classification
+        'metric': 'binary_logloss',
+        'boosting_type': 'gbdt',
+        'num_leaves': train_conf.get('num_leaves', 31),
+        'learning_rate': train_conf.get('learning_rate', 0.05),
+        'max_depth': train_conf.get('max_depth', -1),
+        'min_child_samples': train_conf.get('min_child_samples', 20),
+        'subsample': train_conf.get('subsample', 1.0),
+        'colsample_bytree': train_conf.get('colsample_bytree', 1.0),
+        'reg_alpha': train_conf.get('reg_alpha', 0.0),  # L1 regularization
+        'reg_lambda': train_conf.get('reg_lambda', 0.0),  # L2 regularization
+        'verbose': -1,
+    }
+
+    # Handle class imbalance
+    if train_conf.get('class_weight') == 'balanced':
+        lgbm_params['is_unbalance'] = True
+
+    # Create dataset
+    train_data = lgbm.Dataset(X_train, label=y_train)
+
+    # Train model
+    n_estimators = train_conf.get('n_estimators', 100)
+    model = lgbm.train(
+        lgbm_params,
+        train_data,
+        num_boost_round=n_estimators,
+        valid_sets=[train_data],
+        callbacks=[lgbm.log_evaluation(period=0)]  # Suppress training output
+    )
+
+    return (model, scaler)
+
+
+def predict_lgbm(models: tuple, df_X_test, model_config: dict):
+    """
+    Use trained LightGBM model to make predictions.
+
+    Returns: Series with predictions (probabilities for class 1)
+    """
+    model, scaler = models
+    is_scale = scaler is not None
+
+    input_index = df_X_test.index
+
+    # Scale if needed
+    if is_scale:
+        df_X_test = scaler.transform(df_X_test)
+        df_X_test = pd.DataFrame(data=df_X_test, index=input_index)
+
+    # Drop NaNs
+    df_X_test_nonans = df_X_test.dropna()
+    nonans_index = df_X_test_nonans.index
+
+    # Predict probabilities
+    y_test_hat_nonans = model.predict(df_X_test_nonans.values, num_iteration=model.best_iteration)
+    y_test_hat_nonans = pd.Series(data=y_test_hat_nonans, index=nonans_index)
+
+    # Restore original index with NaNs where input had NaNs
+    df_ret = pd.DataFrame(index=input_index)
+    df_ret["y_hat"] = y_test_hat_nonans
+    sr_ret = df_ret["y_hat"]
+
+    return sr_ret
+
+
+#
+# GB (Legacy - kept for backwards compatibility)
 #
 
 def train_predict_gb(df_X, df_y, df_X_test, model_config: dict):
