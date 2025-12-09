@@ -161,9 +161,9 @@
 
   "trade_model": {
     "trader_binance": true,
-    "no_trades_only_data_processing": false,      // staging: queremos trades reais
-    "test_order_before_submit": true,            // primeiro rodar com test_order na Binance
-    "simulate_order_execution": false,           // não simular, deixar trader_binance decidir
+    "no_trades_only_data_processing": false,
+    "test_order_before_submit": true,
+    "simulate_order_execution": true,           // ← SHADOW MODE (mude para false apenas para produção!)
 
     "percentage_used_for_trade": 2.0,            // 2% do saldo de USDT por trade
     "min_notional_usdt": 5.0,                    // mínimo Binance (US$5)

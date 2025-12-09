@@ -178,12 +178,12 @@
 
     "no_trades_only_data_processing": false,
     "test_order_before_submit": true,
-    "simulate_order_execution": false,
+    "simulate_order_execution": true,  // ← SHADOW MODE (mude para false apenas para produção!)
 
     "percentage_used_for_trade": 2.0,       // 2% do saldo de USDT
     "min_notional_usdt": 5.0,               // Binance não aceita menos que ~US$5 por ordem
     "min_balance_usdt_for_percentage": 500.0,  // abaixo disso, ignora porcentagem e usa min_notional como referência
-    "limit_price_adjustment": 0.002    // 0.2% pra cima/baixo    
+    "limit_price_adjustment": 0.002    // 0.2% pra cima/baixo
   },
 
   "base_asset": "BTC",

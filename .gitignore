@@ -225,6 +225,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+*.claude
+/.claude*
 
 # Spyder project settings
 .spyderproject
