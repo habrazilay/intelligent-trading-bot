@@ -1,0 +1,243 @@
+{
+  // ============================================================================
+  // BTCUSDT 1-Hour AGGRESSIVE Swing Strategy
+  // ============================================================================
+  //
+  // STRATEGY OVERVIEW:
+  // - Swing trading with 1-2% targets
+  // - Medium holding periods (4-8 hours average)
+  // - Trend-following with momentum confirmation
+  // - Low trade frequency (2-5 trades/day target)
+  //
+  // KEY DIFFERENCES FROM 1M/5M:
+  // 1. Labels: 1.0% targets in 4h (vs 0.2% in 10min)
+  // 2. Much cleaner signals: hourly filters noise
+  // 3. Better win rate: Captures trends, not noise
+  // 4. Lower fees: Fewer trades = less impact
+  //
+  // RISK MANAGEMENT:
+  // - Max daily loss: -3%
+  // - Circuit breaker: 3 consecutive losses
+  // - Trailing stops activated after 0.5% profit
+  // - Force exit after 12 hours
+  //
+  // ============================================================================
+
+  // === GENERAL EXECUTION ======================================================
+
+  "train": true,
+  "venue": "binance",
+
+  "api_key": "",
+  "api_secret": "",
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+
+  "data_folder": "./DATA_ITB_1h",
+  "symbol": "BTCUSDT",
+
+  "feature_file_name": "features_agressive.csv",
+  "merge_file_name": "data.csv",
+  "matrix_file_name": "matrix_aggressive.csv",
+  "predict_file_name": "predictions_aggressive.csv",
+  "signal_file_name": "signals_aggressive.csv",
+  "signal_models_file_name": "signal_models_aggressive",
+
+  "model_folder": "MODELS_AGGRESSIVE_V1",
+  "description": "BTCUSDT 1h AGGRESSIVE swing strategy - 1% targets in 4h",
+  "freq": "1h",
+  "pandas_freq": "1h",
+  "time_column": "timestamp",
+
+  // === WINDOWS AND SIZES ======================================================
+
+  "label_horizon": 12,      // 12h horizon
+  "features_horizon": 48,   // 48h (2 days) lookback
+  "train_length": 4320,     // ~180 days of 1h data (180*24)
+  "predict_length": 72,     // Keep last 72 rows (3 days)
+  "append_overlap_records": 5,
+
+  // === DOWNLOAD AND MERGE =====================================================
+
+  "data_sources": [
+    { "folder": "BTCUSDT", "file": "klines", "column_prefix": "" }
+  ],
+
+  "download_start": "2024-06-01",
+  "download_end": null,
+  "merge_interpolate": false,
+
+  // === FEATURES ==============================================================
+
+  "feature_sets": [
+    {
+      "generator": "talib",
+      "config": {
+        "columns": ["close"],
+        "functions": ["SMA"],
+        "windows": [3, 6, 12, 24, 72]
+      }
+    },
+    {
+      "generator": "talib",
+      "config": {
+        "columns": ["close"],
+        "functions": ["LINEARREG_SLOPE"],
+        "windows": [3, 6, 12, 24]
+      }
+    },
+    {
+      "generator": "talib",
+      "config": {
+        "columns": ["close"],
+        "functions": ["RSI"],
+        "windows": [14]
+      }
+    },
+    {
+      "generator": "talib",
+      "config": {
+        "columns": ["high", "low", "close"],
+        "functions": ["ATR"],
+        "windows": [14]
+      }
+    },
+    {
+      "generator": "talib",
+      "config": {
+        "columns": ["close"],
+        "functions": ["STDDEV"],
+        "windows": [12, 24]
+      }
+    },
+    {
+      "generator": "common.gen_labels_aggressive:add_spread_features",
+      "config": {
+        "windows": [3, 6, 12]
+      }
+    },
+    {
+      "generator": "common.gen_labels_aggressive:add_regime_features",
+      "config": {
+        "atr_column": "high_low_close_ATR_14"
+      }
+    }
+  ],
+
+  // === LABELS =================================================================
+  //
+  // 1H AGGRESSIVE LABELS:
+  // - Target: 0.8%, 1.0%, 1.5%
+  // - Horizon: 4 candles (4 hours)
+  // - Based on analysis: P(+1% in 4h) ~= 4.3%
+  //
+  // ============================================================================
+
+  "label_sets": [
+    {
+      "generator": "common.gen_labels_aggressive:generate_labels_aggressive",
+      "config": {
+        "columns": ["close", "high", "low"],
+        "function": "high",
+        "thresholds": [0.80, 1.00, 1.50],
+        "tolerance": 0.10,
+        "horizon": 4,
+        "names": ["high_080_4", "high_100_4", "high_150_4"]
+      }
+    },
+    {
+      "generator": "common.gen_labels_aggressive:generate_labels_aggressive",
+      "config": {
+        "columns": ["close", "high", "low"],
+        "function": "low",
+        "thresholds": [0.80, 1.00, 1.50],
+        "tolerance": 0.10,
+        "horizon": 4,
+        "names": ["low_080_4", "low_100_4", "low_150_4"]
+      }
+    }
+  ],
+
+  // === TRAINING ==============================================================
+
+  "train_feature_sets": [
+    {
+      "generator": "train_features",
+      "config": {}
+    }
+  ],
+
+  "train_features": [
+    "close_SMA_3", "close_SMA_6", "close_SMA_12", "close_SMA_24", "close_SMA_72",
+    "close_LINEARREG_SLOPE_3", "close_LINEARREG_SLOPE_6",
+    "close_LINEARREG_SLOPE_12", "close_LINEARREG_SLOPE_24",
+    "close_RSI_14",
+    "high_low_close_ATR_14", "close_STDDEV_12", "close_STDDEV_24",
+    "spread_pct_3", "spread_pct_6", "spread_pct_12",
+    "vol_regime"
+  ],
+
+  "labels": ["high_100_4", "low_100_4"],
+
+  "algorithms": [
+    {
+      "name": "lgbm",
+      "algo": "lgbm",
+      "params": {},
+      "train": {
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "n_estimators": 300,
+        "max_depth": -1,
+        "min_child_samples": 20,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8
+      }
+    }
+  ],
+
+  // === SIGNALS ===============================================================
+
+  "signal_sets": [
+    {
+      "generator": "combine",
+      "config": {
+        "columns": ["high_100_4_lgbm", "low_100_4_lgbm"],
+        "names": "trade_score_aggressive",
+        "combine": "difference"
+      }
+    },
+    {
+      "generator": "threshold_rule",
+      "config": {
+        "columns": "trade_score_aggressive",
+        "names": ["buy_signal_aggressive", "sell_signal_aggressive"],
+        "parameters": {
+          "buy_signal_threshold": 0.01,
+          "sell_signal_threshold": -0.01
+        }
+      }
+    }
+  ],
+
+  // === OUTPUTS ===============================================================
+
+  "output_sets": [
+    {
+      "generator": "score_notification_model",
+      "config": {
+        "score_notification": true,
+        "score_column_names": ["trade_score_aggressive"]
+      }
+    },
+    {
+      "generator": "trader_simulation",
+      "config": {
+        "buy_signal_column": "buy_signal_aggressive",
+        "sell_signal_column": "sell_signal_aggressive",
+        "buy_trade_signals": ["buy_signal_aggressive"],
+        "sell_trade_signals": ["sell_signal_aggressive"]
+      }
+    }
+  ]
+}
