@@ -79,7 +79,7 @@ echo "────────────────────────�
 echo "🔗 STEP 2: Merge Data"
 echo "──────────────────────────────────────────────────────────────────────"
 
-DATA_CSV="$DATA_DIR/data.csv"
+DATA_CSV="$DATA_DIR/BTCUSDT/data.csv"
 
 if check_file "$DATA_CSV"; then
     LINES=$(count_lines "$DATA_CSV")
@@ -100,25 +100,15 @@ echo "────────────────────────�
 echo "⚙️  STEP 3: Generate Features"
 echo "──────────────────────────────────────────────────────────────────────"
 
-FEATURES_CSV="$DATA_DIR/features.csv"
+FEATURES_CSV="$DATA_DIR/BTCUSDT/features_agressive.csv"
 
 if check_file "$FEATURES_CSV"; then
     LINES=$(count_lines "$FEATURES_CSV")
-    echo "⚠️  WARNING: $FEATURES_CSV exists with $LINES lines"
-    echo "   Checking if it has aggressive mode features (vol_regime, spread_pct_3)..."
-
-    # Check if aggressive features exist
-    if head -1 "$FEATURES_CSV" | grep -q "vol_regime"; then
-        echo "✅ SKIP: Aggressive features already present"
-    else
-        echo "❌ REGENERATING: Missing aggressive features (vol_regime, spread_pct_*)"
-        echo "   Backing up old features.csv to features_old.csv..."
-        cp "$FEATURES_CSV" "$DATA_DIR/features_old.csv"
-        python -m scripts.features -c "$CONFIG"
-    fi
+    echo "✅ SKIP: $FEATURES_CSV exists with $LINES lines (aggressive features)"
+    echo "   To regenerate, delete: $FEATURES_CSV"
 else
     echo "⚙️  Generating features (SMA, RSI, ATR, regime, spread)..."
-    python -m scripts.features -c "$CONFIG"
+    python -m scripts.features_new -c "$CONFIG"
 fi
 
 echo ""
@@ -131,10 +121,10 @@ echo "────────────────────────�
 echo "🎯 STEP 4: Generate Aggressive Labels"
 echo "──────────────────────────────────────────────────────────────────────"
 
-MATRIX_CSV="$DATA_DIR/matrix_aggressive.csv"
+MATRIX_CSV="$DATA_DIR/BTCUSDT/matrix_aggressive.csv"
 
 echo "🎯 Generating NEW labels: high_020_10, low_020_10 (0.2% in 10 min)..."
-python -m scripts.labels -c "$CONFIG"
+python -m scripts.labels_new -c "$CONFIG"
 
 if check_file "$MATRIX_CSV"; then
     LINES=$(count_lines "$MATRIX_CSV")
@@ -158,18 +148,19 @@ echo "🧠 Training LGBM on aggressive labels (5-10 minutes)..."
 python -m scripts.train -c "$CONFIG"
 
 # Check if models were created
-MODEL_HIGH="$MODEL_DIR/high_020_10_lgbm_aggressive.pickle"
-MODEL_LOW="$MODEL_DIR/low_020_10_lgbm_aggressive.pickle"
+MODEL_HIGH="$DATA_DIR/BTCUSDT/$MODEL_DIR/high_020_10_lgbm.pickle"
+MODEL_LOW="$DATA_DIR/BTCUSDT/$MODEL_DIR/low_020_10_lgbm.pickle"
 
 if check_file "$MODEL_HIGH" && check_file "$MODEL_LOW"; then
     echo "✅ Models created successfully:"
     ls -lh "$MODEL_HIGH" "$MODEL_LOW"
 
     # Show training metrics
-    if check_file "$MODEL_DIR/prediction-metrics.txt"; then
+    METRICS_FILE="$DATA_DIR/BTCUSDT/$MODEL_DIR/prediction-metrics.txt"
+    if check_file "$METRICS_FILE"; then
         echo ""
         echo "📊 Training Metrics:"
-        cat "$MODEL_DIR/prediction-metrics.txt"
+        cat "$METRICS_FILE"
     fi
 else
     echo "❌ ERROR: Failed to create models"
@@ -189,7 +180,7 @@ echo "────────────────────────�
 echo "🔮 Applying LGBM models to generate predictions..."
 python -m scripts.predict -c "$CONFIG"
 
-PRED_CSV="$DATA_DIR/predictions_aggressive.csv"
+PRED_CSV="$DATA_DIR/BTCUSDT/predictions_aggressive.csv"
 if check_file "$PRED_CSV"; then
     echo "✅ Created: $PRED_CSV"
 else
@@ -210,7 +201,7 @@ echo "────────────────────────�
 echo "📊 Converting predictions to buy/sell signals (threshold: 0.01)..."
 python -m scripts.signals -c "$CONFIG"
 
-SIGNAL_CSV="$DATA_DIR/signals_aggressive.csv"
+SIGNAL_CSV="$DATA_DIR/BTCUSDT/signals_aggressive.csv"
 if check_file "$SIGNAL_CSV"; then
     echo "✅ Created: $SIGNAL_CSV"
 
