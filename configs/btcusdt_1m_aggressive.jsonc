@@ -232,7 +232,7 @@
 
   "algorithms": [
     {
-      "name": "lgbm_aggressive",
+      "name": "lgbm",  // ⚠️ NO UNDERSCORES! System uses "_" as separator
       "algo": "lgbm",
       "params": {},
       "train": {
