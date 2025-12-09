@@ -36,14 +36,18 @@
   "telegram_bot_token": "",
   "telegram_chat_id": "",
 
-  "data_folder": "./DATA_ITB_1m_aggressive",
+  // REUSE EXISTING DATA: Share data_folder with conservative mode to avoid re-download
+  "data_folder": "./DATA_ITB_1m",
 
   "symbol": "BTCUSDT",
-  "feature_file_name": "features.csv",
-  "merge_file_name": "data.csv",
-  "matrix_file_name": "matrix.csv",
-  "predict_file_name": "predictions_aggressive.csv",
-  "signal_file_name": "signals_aggressive.csv",
+
+  // REUSE: features.csv and data.csv (if compatible)
+  // NEW: matrix.csv (different labels), predictions, signals
+  "feature_file_name": "features.csv",          // Can reuse if same features
+  "merge_file_name": "data.csv",                // Can reuse (klines merge)
+  "matrix_file_name": "matrix_aggressive.csv",  // NEW - different labels
+  "predict_file_name": "predictions_aggressive.csv",  // NEW
+  "signal_file_name": "signals_aggressive.csv",       // NEW
   "signal_models_file_name": "signal_models_aggressive",
 
   "model_folder": "MODELS_AGGRESSIVE_V1",
