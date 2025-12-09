@@ -203,8 +203,11 @@ def print_summary():
             print(f"      Best bid: ${sample['best_bid']:,.2f}")
             print(f"      Best ask: ${sample['best_ask']:,.2f}")
             print(f"      Spread: {sample['spread_pct']:.4f}%")
-            print(f"      Top 3 bids: {[f\"${p:,.2f}×{q:.3f}\" for p, q in sample['top_5_bids'][:3]]}")
-            print(f"      Top 3 asks: {[f\"${p:,.2f}×{q:.3f}\" for p, q in sample['top_5_asks'][:3]]}")
+            # Format bid/ask lists separately to avoid nested f-string issues
+            top_bids = ', '.join([f"${p:,.2f}×{q:.3f}" for p, q in sample['top_5_bids'][:3]])
+            top_asks = ', '.join([f"${p:,.2f}×{q:.3f}" for p, q in sample['top_5_asks'][:3]])
+            print(f"      Top 3 bids: {top_bids}")
+            print(f"      Top 3 asks: {top_asks}")
 
     # Verdict
     print("\n" + "="*60)
