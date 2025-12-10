@@ -9,7 +9,9 @@
         download train predict pipeline clean validate-configs \
         infra-dev-apply image-dev dev-1m dev-5m analyze-1m \
         upload-1m upload-5m upload-1h staging-1m staging-5m shadow-1m shadow-5m \
-        analyze-staging analyze-staging-high-capital analyze-staging-custom
+        analyze-staging analyze-staging-high-capital analyze-staging-custom \
+        gcp-setup-automated gcp-upload-bigquery gcp-automl gcp-lstm gcp-monitor \
+        verify-orderbook collect-orderbook
 
 # Default target
 help:
@@ -59,6 +61,17 @@ help:
 	@echo "    make analyze-staging            - Analyze shadow mode logs (V4)"
 	@echo "    make analyze-staging-high-capital - Analyze with $10K capital"
 	@echo "    make analyze-staging-custom     - Custom: LOG_FILE=... CAPITAL=... RISK=..."
+	@echo ""
+	@echo "  Order Flow Collection:"
+	@echo "    make verify-orderbook       - Verify collected orderbook data"
+	@echo "    make collect-orderbook      - Start 7-day orderbook collection"
+	@echo ""
+	@echo "  GCP Cloud ML:"
+	@echo "    make gcp-setup-automated    - Automated GCP setup (15 min)"
+	@echo "    make gcp-upload-bigquery    - Upload data to BigQuery (CONFIG=...)"
+	@echo "    make gcp-automl             - Run AutoML training (CONFIG=..., BUDGET=1)"
+	@echo "    make gcp-lstm               - Run LSTM GPU training (CONFIG=...)"
+	@echo "    make gcp-monitor            - Monitor GCP costs"
 	@echo ""
 	@echo "  Utilities:"
 	@echo "    make validate         - Validate all configs"
@@ -322,3 +335,99 @@ pipeline-all:
 		echo "═══════════════════════════════════════════════"; \
 		$(MAKE) pipeline CONFIG=configs/$${symbol,,}_1m_dev.jsonc || true; \
 	done
+
+# =============================================================================
+# Order Flow Collection
+# =============================================================================
+
+verify-orderbook:
+	@echo "Verifying orderbook data collection..."
+	python scripts/verify_orderbook_data.py
+
+collect-orderbook:
+	@echo "Starting 7-day orderbook collection..."
+	@echo "This will run in background with nohup"
+	@echo "Monitor with: tail -f collector_7days.log"
+	nohup python scripts/collect_orderbook.py \
+		--symbol BTCUSDT \
+		--duration 7d \
+		--save-interval 6h \
+		> collector_7days.log 2>&1 &
+	@echo "Collection started! PID: $$!"
+	@echo "Monitor: tail -f collector_7days.log"
+	@echo "Check status: ps aux | grep collect_orderbook"
+
+# =============================================================================
+# GCP Cloud ML Operations
+# =============================================================================
+
+# Budget for AutoML (in hours)
+BUDGET ?= 1
+
+gcp-setup-automated:
+	@echo "Running automated GCP setup..."
+	@echo "This will:"
+	@echo "  1. Install gcloud CLI (if needed)"
+	@echo "  2. Authenticate your account"
+	@echo "  3. Create GCP project"
+	@echo "  4. Link billing account (~$$970 USD credits)"
+	@echo "  5. Enable APIs (Vertex AI, BigQuery, Compute)"
+	@echo "  6. Install Python dependencies"
+	@echo ""
+	bash scripts/setup_gcp.sh
+
+gcp-upload-bigquery:
+	@echo "Uploading data to BigQuery..."
+	@if [ -z "$(CONFIG)" ]; then \
+		echo "Error: CONFIG not specified. Usage: make gcp-upload-bigquery CONFIG=configs/btcusdt_5m_aggressive.jsonc"; \
+		exit 1; \
+	fi
+	python scripts/upload_to_bigquery.py -c $(CONFIG)
+
+gcp-automl:
+	@echo "Running GCP AutoML training..."
+	@echo "Budget: $(BUDGET) hour(s) (~$$$(shell echo $$(($(BUDGET) * 5))) USD)"
+	@if [ -z "$(CONFIG)" ]; then \
+		echo "Error: CONFIG not specified. Usage: make gcp-automl CONFIG=configs/btcusdt_5m_orderflow.jsonc BUDGET=1"; \
+		exit 1; \
+	fi
+	python scripts/gcp_automl_train.py -c $(CONFIG) --budget $(BUDGET)
+
+gcp-lstm:
+	@echo "Running LSTM GPU training on GCP..."
+	@echo "Estimated cost: $$10-30 (2-4 hours on T4 GPU)"
+	@if [ -z "$(CONFIG)" ]; then \
+		echo "Error: CONFIG not specified. Usage: make gcp-lstm CONFIG=configs/btcusdt_5m_orderflow.jsonc"; \
+		exit 1; \
+	fi
+	python scripts/lstm_gpu_train.py -c $(CONFIG)
+
+gcp-monitor:
+	@echo "Monitoring GCP costs..."
+	python scripts/cloud_cost_monitor.py
+
+gcp-monitor-continuous:
+	@echo "Starting continuous cost monitoring (every hour)..."
+	python scripts/cloud_cost_monitor.py --monitor --interval 3600
+
+# Quick workflow for GCP ML
+gcp-workflow:
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo "  GCP ML Workflow - Upload + AutoML"
+	@echo "═══════════════════════════════════════════════════════════════"
+	@if [ -z "$(CONFIG)" ]; then \
+		echo "Error: CONFIG not specified."; \
+		echo "Usage: make gcp-workflow CONFIG=configs/btcusdt_5m_orderflow.jsonc BUDGET=1"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "Step 1: Upload to BigQuery..."
+	$(MAKE) gcp-upload-bigquery CONFIG=$(CONFIG)
+	@echo ""
+	@echo "Step 2: Run AutoML ($(BUDGET)h budget)..."
+	$(MAKE) gcp-automl CONFIG=$(CONFIG) BUDGET=$(BUDGET)
+	@echo ""
+	@echo "Step 3: Check costs..."
+	$(MAKE) gcp-monitor
+	@echo ""
+	@echo "Workflow complete!"
