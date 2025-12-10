@@ -64,18 +64,28 @@ def upload_to_bigquery(config_file, dataset_name=None, project_id=None):
     print(f"Symbol: {symbol}")
     print(f"Frequency: {freq}")
 
-    # Find merged data
-    merged_file = data_folder / 'merged_data.csv'
-    if not merged_file.exists():
-        # Try predictions file
-        merged_file = data_folder / 'predictions.csv'
+    # Find data file (check symbol subfolder)
+    symbol_folder = data_folder / symbol
 
-    if not merged_file.exists():
-        print(f"\n❌ No data found in {data_folder}/")
+    # Try different file patterns based on config
+    possible_files = [
+        symbol_folder / 'matrix_aggressive.csv',  # Aggressive config
+        symbol_folder / 'predictions_aggressive.csv',
+        symbol_folder / 'matrix.csv',  # Standard config
+        symbol_folder / 'predictions.csv',
+        data_folder / 'merged_data.csv',  # Legacy
+    ]
+
+    merged_file = None
+    for candidate in possible_files:
+        if candidate.exists():
+            merged_file = candidate
+            break
+
+    if not merged_file:
+        print(f"\n❌ No data found in {symbol_folder}/")
         print("Run the pipeline first:")
-        print(f"  python scripts/features_new.py -c {config_file}")
-        print(f"  python scripts/labels_new.py -c {config_file}")
-        print(f"  python scripts/merge_new.py -c {config_file}")
+        print(f"  make pipeline CONFIG={config_file}")
         return False
 
     print(f"\n📊 Loading data from: {merged_file}")
