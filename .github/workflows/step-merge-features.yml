@@ -1,4 +1,4 @@
-name: Run merge_new + features_new on Azure ACI (ACR + FileShare)
+name: Step - Merge + Features
 
 on:
   workflow_dispatch:
