@@ -1,32 +1,123 @@
 name: Build & Push Docker Image
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      push_to:
+        description: 'Where to push (dockerhub, acr, or both)'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - dockerhub
+          - acr
+  # Uncomment to auto-build on push to main branches
   # push:
-    # branches: ["dev", "master"]
-    
+  #   branches: ["dev", "main"]
 
 env:
-  IMAGE_NAME: habrazilay/itb-bot
+  DOCKERHUB_IMAGE: habrazilay/itb-bot
+  ACR_LOGIN_SERVER: itbacr.azurecr.io
+  ACR_IMAGE: itbacr.azurecr.io/itb-bot
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Generate tags
+        id: tags
+        run: |
+          TIMESTAMP=$(date +%s)
+          SHORT_SHA=${GITHUB_SHA::7}
+          ARCH=$(uname -m)
+
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "arch_tag=${ARCH}-${TIMESTAMP}" >> $GITHUB_OUTPUT
+
       - name: Login to Docker Hub
+        if: github.event.inputs.push_to == 'dockerhub' || github.event.inputs.push_to == 'both' || github.event.inputs.push_to == ''
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Login to Azure Container Registry
+        if: github.event.inputs.push_to == 'acr' || github.event.inputs.push_to == 'both' || github.event.inputs.push_to == ''
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build Docker image
         run: |
-          TAG=${GITHUB_SHA::7}
-          docker build -t $IMAGE_NAME:$TAG -t $IMAGE_NAME:latest .
-          docker push $IMAGE_NAME:$TAG
-          docker push $IMAGE_NAME:latest
+          docker build \
+            --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+            --build-arg VCS_REF=${{ steps.tags.outputs.short_sha }} \
+            -t build-temp \
+            .
+
+      - name: Push to Docker Hub
+        if: github.event.inputs.push_to == 'dockerhub' || github.event.inputs.push_to == 'both' || github.event.inputs.push_to == ''
+        run: |
+          docker tag build-temp ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.short_sha }}
+          docker tag build-temp ${{ env.DOCKERHUB_IMAGE }}:latest
+
+          docker push ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.short_sha }}
+          docker push ${{ env.DOCKERHUB_IMAGE }}:latest
+
+          echo "✅ Pushed to Docker Hub:"
+          echo "   - ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.short_sha }}"
+          echo "   - ${{ env.DOCKERHUB_IMAGE }}:latest"
+
+      - name: Push to Azure Container Registry
+        if: github.event.inputs.push_to == 'acr' || github.event.inputs.push_to == 'both' || github.event.inputs.push_to == ''
+        run: |
+          docker tag build-temp ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.arch_tag }}
+          docker tag build-temp ${{ env.ACR_IMAGE }}:latest
+
+          docker push ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.arch_tag }}
+          docker push ${{ env.ACR_IMAGE }}:latest
+
+          echo "✅ Pushed to Azure ACR:"
+          echo "   - ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.arch_tag }}"
+          echo "   - ${{ env.ACR_IMAGE }}:latest"
+
+      - name: Summary
+        run: |
+          echo "## 🐳 Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Info:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ steps.tags.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Timestamp: \`${{ steps.tags.outputs.timestamp }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Architecture Tag: \`${{ steps.tags.outputs.arch_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ github.event.inputs.push_to }}" == "dockerhub" ] || [ "${{ github.event.inputs.push_to }}" == "both" ] || [ -z "${{ github.event.inputs.push_to }}" ]; then
+            echo "**Docker Hub:**" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.DOCKERHUB_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ github.event.inputs.push_to }}" == "acr" ] || [ "${{ github.event.inputs.push_to }}" == "both" ] || [ -z "${{ github.event.inputs.push_to }}" ]; then
+            echo "**Azure ACR:**" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.arch_tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`${{ env.ACR_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "**Usage in workflows:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
+          echo "image_tag: ${{ steps.tags.outputs.arch_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "# or" >> $GITHUB_STEP_SUMMARY
+          echo "image_tag: latest" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

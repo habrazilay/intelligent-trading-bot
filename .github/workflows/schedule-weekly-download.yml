@@ -1,9 +1,9 @@
-name: Download Binance Data to Azure
+name: Schedule - Weekly Download
 
 on:
-  # Scheduled: run daily at 00:05 UTC
+  # Scheduled: run weekly on Monday at 00:05 UTC
   schedule:
-    - cron: '5 0 * * *'
+    - cron: '5 0 * * 1'
 
   # Manual trigger
   workflow_dispatch:
