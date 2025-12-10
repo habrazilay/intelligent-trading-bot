@@ -157,15 +157,15 @@ download:
 
 merge:
 	@echo "Merging data..."
-	python -m scripts.merge_new -c $(CONFIG)
+	python -m scripts.merge -c $(CONFIG)
 
 features:
 	@echo "Generating features..."
-	python -m scripts.features_new -c $(CONFIG)
+	python -m scripts.features -c $(CONFIG)
 
 labels:
 	@echo "Generating labels..."
-	python -m scripts.labels_new -c $(CONFIG)
+	python -m scripts.labels -c $(CONFIG)
 
 train:
 	@echo "Training models..."
