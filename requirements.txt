@@ -23,4 +23,9 @@ lightgbm==4.*
 tensorflow==2.19.*
 python-dotenv>=1.0.0
 
+# Google Cloud Platform (for cloud ML training)
+google-cloud-bigquery>=3.0.0
+google-cloud-aiplatform>=1.38.0
+google-cloud-storage>=2.10.0
+
 # seaborn  # if outputs with diagrams are used
