@@ -1,4 +1,10 @@
-name: Azure ML Pipeline - Training & Shadow Mode
+name: Azure ML Pipeline - Training & Shadow Mode (DEPRECATED)
+
+# =============================================================================
+# DEPRECATED: Use "Run Full Pipeline in Azure Container Instance" instead
+# This workflow installs TA-Lib manually in each job (slow, ~3min per job)
+# The ACI workflow uses pre-built Docker images with everything included
+# =============================================================================
 
 on:
   # push:
@@ -6,11 +12,11 @@ on:
   #     # - main
   #     # - staging
   #     - dev
-  pull_request:
-    branches:
-      # - main
-      - dev
-      # - staging
+  # pull_request:
+  #   branches:
+  #     # - main
+  #     - dev
+  #     # - staging
   workflow_dispatch:
     inputs:
       symbol:
