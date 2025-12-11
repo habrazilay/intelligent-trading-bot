@@ -6,7 +6,7 @@ on:
       push_to:
         description: 'Where to push (dockerhub, acr, or both)'
         required: true
-        default: 'both'
+        default: 'acr'
         type: choice
         options:
           - both

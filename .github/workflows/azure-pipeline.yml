@@ -3,13 +3,14 @@ name: Azure ML Pipeline - Training & Shadow Mode
 on:
   push:
     branches:
-      - main
-      - staging
+      # - main
+      # - staging
       - dev
   pull_request:
     branches:
-      - main
-      - staging
+      # - main
+      - dev
+      # - staging
   workflow_dispatch:
     inputs:
       symbol:

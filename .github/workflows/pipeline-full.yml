@@ -1,49 +1,111 @@
-name: ITB Trading Pipeline - Full
+name: Full Offline Training
 
 on:
+  push:
+    branches:
+      # - main
+      # - staging
+      - dev
+  pull_request:
+    branches:
+      # - main
+      - dev
+      # - staging
   workflow_dispatch:
     inputs:
-      config_path:
-        description: "Config file (e.g., configs/btcusdt_5m_aggressive.jsonc)"
+      symbol:
+        description: 'Trading symbol (e.g., BTCUSDT, ETHUSDT)'
         required: true
-        default: "configs/btcusdt_1m_dev.jsonc"
+        default: 'BTCUSDT'
+      freq:
+        description: 'Timeframe (1m, 5m, 1h)'
+        required: true
+        type: choice
+        options:
+          - 1m
+          - 5m
+          - 1h
+        default: '5m'
+      strategy:
+        description: 'Strategy config'
+        required: true
+        type: choice
+        options:
+          - conservative
+          - aggressive
+          - staging
+          - quick
+        default: 'conservative'
+      pipeline_mode:
+        description: 'Pipeline mode'
+        required: true
+        type: choice
+        options:
+          - full
+          - train-only
+          - predict-only
+        default: 'full'
       image_tag:
         description: "Docker image tag (e.g., amd64-1764313462 or latest)"
         required: true
         default: "latest"
 
 jobs:
+  # Build config_path from inputs
+  setup:
+    name: Setup Pipeline
+    runs-on: ubuntu-latest
+    outputs:
+      config_path: ${{ steps.set-config.outputs.config_path }}
+      image_tag: ${{ steps.set-config.outputs.image_tag }}
+    steps:
+      - name: Set config path from inputs
+        id: set-config
+        run: |
+          STRATEGY="${{ github.event.inputs.strategy || 'conservative' }}"
+          IMAGE_TAG="${{ github.event.inputs.image_tag || 'latest' }}"
+          CONFIG_PATH="configs/base_${STRATEGY}.jsonc"
+          echo "config_path=$CONFIG_PATH" >> $GITHUB_OUTPUT
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "📋 Config: $CONFIG_PATH"
+          echo "🐳 Image tag: $IMAGE_TAG"
+
   merge_features:
     name: Merge + Features
+    needs: setup
+    if: ${{ github.event.inputs.pipeline_mode != 'predict-only' }}
     uses: ./.github/workflows/step-merge-features.yml
     secrets: inherit
     with:
-      config_path: ${{ github.event.inputs.config_path }}
-      image_tag:   ${{ github.event.inputs.image_tag }}
+      config_path: ${{ needs.setup.outputs.config_path }}
+      image_tag: ${{ needs.setup.outputs.image_tag }}
 
   labels:
     name: Generate Labels
-    needs: merge_features
+    needs: [setup, merge_features]
+    if: ${{ github.event.inputs.pipeline_mode != 'predict-only' }}
     uses: ./.github/workflows/step-labels.yml
     secrets: inherit
     with:
-      config_path: ${{ github.event.inputs.config_path }}
-      image_tag:   ${{ github.event.inputs.image_tag }}
+      config_path: ${{ needs.setup.outputs.config_path }}
+      image_tag: ${{ needs.setup.outputs.image_tag }}
 
   train:
     name: Train Models
-    needs: labels
+    needs: [setup, labels]
+    if: ${{ github.event.inputs.pipeline_mode != 'predict-only' }}
     uses: ./.github/workflows/step-train.yml
     secrets: inherit
     with:
-      config_path: ${{ github.event.inputs.config_path }}
-      image_tag:   ${{ github.event.inputs.image_tag }}
+      config_path: ${{ needs.setup.outputs.config_path }}
+      image_tag: ${{ needs.setup.outputs.image_tag }}
 
   predict_signals:
     name: Predict + Signals
-    needs: train
+    needs: [setup, train]
+    if: ${{ always() && (github.event.inputs.pipeline_mode == 'full' || github.event.inputs.pipeline_mode == 'predict-only') }}
     uses: ./.github/workflows/step-predict-signals.yml
     secrets: inherit
     with:
-      config_path: ${{ github.event.inputs.config_path }}
-      image_tag:   ${{ github.event.inputs.image_tag }}
+      config_path: ${{ needs.setup.outputs.config_path }}
+      image_tag: ${{ needs.setup.outputs.image_tag }}
