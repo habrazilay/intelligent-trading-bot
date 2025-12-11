@@ -13,5 +13,9 @@ ta-lib
 numba  # For highlow label generator
 dateparser  # For time parsing utilities
 
+# MLflow for experiment tracking
+mlflow>=2.8.0
+azureml-mlflow>=1.50.0  # Azure ML integration
+
 # Seaborn for training visualizations (optional)
 # seaborn
