@@ -15,6 +15,10 @@ on:
         description: "Timeframe (1m, 5m, 1h)"
         required: true
         default: "5m"
+      image_tag:
+        description: "ACR image tag (e.g., dev-training, v1.0.0-dev-training)"
+        required: false
+        default: "dev-training"
   workflow_call:
     inputs:
       config_path:
@@ -29,6 +33,11 @@ on:
         description: "Timeframe"
         required: true
         type: string
+      image_tag:
+        description: "ACR image tag"
+        required: false
+        type: string
+        default: "dev-training"
 
 jobs:
   predict_signals:
@@ -36,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     container:
-      image: ${{ vars.ACR_LOGIN_SERVER }}/itb-bot:dev-training
+      image: ${{ vars.ACR_LOGIN_SERVER }}/itb-bot:${{ inputs.image_tag || github.event.inputs.image_tag || 'dev-training' }}
       credentials:
         username: ${{ secrets.ACR_USERNAME }}
         password: ${{ secrets.ACR_PASSWORD }}
