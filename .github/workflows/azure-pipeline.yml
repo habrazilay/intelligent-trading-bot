@@ -99,6 +99,7 @@ jobs:
   download-data:
     name: Download Historical Data
     runs-on: ubuntu-latest
+    environment: dev
     needs: validate
     if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[download]') }}
 
@@ -129,8 +130,8 @@ jobs:
 
       - name: Download Binance data
         env:
-          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
-          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY_DEV }}
+          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET_DEV }}
         run: |
           python -m scripts.download_binance \
             -c ${{ steps.set-defaults.outputs.config }} \
