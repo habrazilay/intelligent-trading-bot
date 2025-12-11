@@ -48,7 +48,7 @@ on:
       image_tag:
         description: "Docker image tag (e.g., amd64-1764313462 or latest)"
         required: true
-        default: "latest"
+        default: "amd64-1764313462"
 
 jobs:
   # Build config_path from inputs
@@ -63,7 +63,7 @@ jobs:
         id: set-config
         run: |
           STRATEGY="${{ github.event.inputs.strategy || 'conservative' }}"
-          IMAGE_TAG="${{ github.event.inputs.image_tag || 'latest' }}"
+          IMAGE_TAG="${{ github.event.inputs.image_tag || 'amd64-1764313462' }}"
           CONFIG_PATH="configs/base_${STRATEGY}.jsonc"
           echo "config_path=$CONFIG_PATH" >> $GITHUB_OUTPUT
           echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT

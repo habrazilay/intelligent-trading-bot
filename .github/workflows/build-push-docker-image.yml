@@ -3,18 +3,44 @@ name: Build & Push Docker Image
 on:
   workflow_dispatch:
     inputs:
-      push_to:
-        description: 'Where to push (dockerhub, acr, or both)'
+      action:
+        description: 'Action to perform'
         required: true
-        default: 'acr'
         type: choice
         options:
-          - both
-          - dockerhub
+          - build        # Build new image with version
+          - promote      # Promote existing image to another env
+        default: 'build'
+      version:
+        description: 'Version (e.g., 1.2.3) - required for build'
+        required: false
+        default: ''
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+        default: 'dev'
+      source_env:
+        description: 'Source environment (for promote action only)'
+        required: false
+        type: choice
+        options:
+          - dev
+          - staging
+        default: 'dev'
+      push_to:
+        description: 'Registry to push'
+        required: true
+        type: choice
+        options:
           - acr
-  # Uncomment to auto-build on push to main branches
-  # push:
-  #   branches: ["dev", "main"]
+          - dockerhub
+          - both
+        default: 'acr'
 
 env:
   DOCKERHUB_IMAGE: habrazilay/itb-bot
@@ -22,9 +48,28 @@ env:
   ACR_IMAGE: itbacr.azurecr.io/itb-bot
 
 jobs:
-  build-and-push:
+  # =============================================================================
+  # BUILD: Create new image with version tag
+  # =============================================================================
+  build:
+    if: github.event.inputs.action == 'build'
     runs-on: ubuntu-latest
     steps:
+      - name: Validate version input
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            echo "❌ Error: Version is required for build action"
+            echo "   Example: 1.2.3"
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Error: Version must be in format X.Y.Z (e.g., 1.2.3)"
+            echo "   Got: $VERSION"
+            exit 1
+          fi
+          echo "✅ Version format valid: $VERSION"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -34,23 +79,39 @@ jobs:
       - name: Generate tags
         id: tags
         run: |
-          TIMESTAMP=$(date +%s)
+          VERSION="${{ github.event.inputs.version }}"
+          ENV="${{ github.event.inputs.environment }}"
           SHORT_SHA=${GITHUB_SHA::7}
-          ARCH=$(uname -m)
 
-          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          # Main version tag with environment
+          if [ "$ENV" == "prod" ]; then
+            VERSION_TAG="v${VERSION}"
+          else
+            VERSION_TAG="v${VERSION}-${ENV}"
+          fi
+
+          # Full tag with commit SHA for traceability
+          FULL_TAG="v${VERSION}-${ENV}-${SHORT_SHA}"
+
+          echo "version_tag=${VERSION_TAG}" >> $GITHUB_OUTPUT
+          echo "full_tag=${FULL_TAG}" >> $GITHUB_OUTPUT
+          echo "env_tag=${ENV}" >> $GITHUB_OUTPUT
           echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
-          echo "arch_tag=${ARCH}-${TIMESTAMP}" >> $GITHUB_OUTPUT
+
+          echo "📦 Tags to create:"
+          echo "   - ${VERSION_TAG} (main)"
+          echo "   - ${FULL_TAG} (with SHA)"
+          echo "   - ${ENV} (environment latest)"
 
       - name: Login to Docker Hub
-        if: github.event.inputs.push_to == 'dockerhub' || github.event.inputs.push_to == 'both' || github.event.inputs.push_to == ''
+        if: github.event.inputs.push_to == 'dockerhub' || github.event.inputs.push_to == 'both'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to Azure Container Registry
-        if: github.event.inputs.push_to == 'acr' || github.event.inputs.push_to == 'both' || github.event.inputs.push_to == ''
+        if: github.event.inputs.push_to == 'acr' || github.event.inputs.push_to == 'both'
         uses: azure/docker-login@v1
         with:
           login-server: ${{ env.ACR_LOGIN_SERVER }}
@@ -61,63 +122,210 @@ jobs:
         run: |
           docker build \
             --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+            --build-arg VERSION=${{ github.event.inputs.version }} \
             --build-arg VCS_REF=${{ steps.tags.outputs.short_sha }} \
+            --build-arg ENVIRONMENT=${{ github.event.inputs.environment }} \
             -t build-temp \
             .
 
       - name: Push to Docker Hub
-        if: github.event.inputs.push_to == 'dockerhub' || github.event.inputs.push_to == 'both' || github.event.inputs.push_to == ''
+        if: github.event.inputs.push_to == 'dockerhub' || github.event.inputs.push_to == 'both'
         run: |
-          docker tag build-temp ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.short_sha }}
-          docker tag build-temp ${{ env.DOCKERHUB_IMAGE }}:latest
+          # Tag and push version tag
+          docker tag build-temp ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.version_tag }}
+          docker push ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.version_tag }}
 
-          docker push ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.short_sha }}
-          docker push ${{ env.DOCKERHUB_IMAGE }}:latest
+          # Tag and push full tag with SHA
+          docker tag build-temp ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.full_tag }}
+          docker push ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.full_tag }}
+
+          # Tag and push environment tag
+          docker tag build-temp ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.env_tag }}
+          docker push ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.env_tag }}
 
           echo "✅ Pushed to Docker Hub:"
-          echo "   - ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.short_sha }}"
-          echo "   - ${{ env.DOCKERHUB_IMAGE }}:latest"
+          echo "   - ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.version_tag }}"
+          echo "   - ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.full_tag }}"
+          echo "   - ${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.env_tag }}"
 
       - name: Push to Azure Container Registry
-        if: github.event.inputs.push_to == 'acr' || github.event.inputs.push_to == 'both' || github.event.inputs.push_to == ''
+        if: github.event.inputs.push_to == 'acr' || github.event.inputs.push_to == 'both'
         run: |
-          docker tag build-temp ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.arch_tag }}
-          docker tag build-temp ${{ env.ACR_IMAGE }}:latest
+          # Tag and push version tag
+          docker tag build-temp ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.version_tag }}
+          docker push ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.version_tag }}
 
-          docker push ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.arch_tag }}
-          docker push ${{ env.ACR_IMAGE }}:latest
+          # Tag and push full tag with SHA
+          docker tag build-temp ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.full_tag }}
+          docker push ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.full_tag }}
+
+          # Tag and push environment tag
+          docker tag build-temp ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.env_tag }}
+          docker push ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.env_tag }}
 
           echo "✅ Pushed to Azure ACR:"
-          echo "   - ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.arch_tag }}"
-          echo "   - ${{ env.ACR_IMAGE }}:latest"
+          echo "   - ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.version_tag }}"
+          echo "   - ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.full_tag }}"
+          echo "   - ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.env_tag }}"
 
-      - name: Summary
+      - name: Build Summary
         run: |
           echo "## 🐳 Docker Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Build Info:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Commit: \`${{ steps.tags.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Timestamp: \`${{ steps.tags.outputs.timestamp }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Architecture Tag: \`${{ steps.tags.outputs.arch_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${{ github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** \`${{ github.event.inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ steps.tags.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-
-          if [ "${{ github.event.inputs.push_to }}" == "dockerhub" ] || [ "${{ github.event.inputs.push_to }}" == "both" ] || [ -z "${{ github.event.inputs.push_to }}" ]; then
-            echo "**Docker Hub:**" >> $GITHUB_STEP_SUMMARY
-            echo "- \`${{ env.DOCKERHUB_IMAGE }}:${{ steps.tags.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- \`${{ env.DOCKERHUB_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          if [ "${{ github.event.inputs.push_to }}" == "acr" ] || [ "${{ github.event.inputs.push_to }}" == "both" ] || [ -z "${{ github.event.inputs.push_to }}" ]; then
-            echo "**Azure ACR:**" >> $GITHUB_STEP_SUMMARY
-            echo "- \`${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.arch_tag }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- \`${{ env.ACR_IMAGE }}:latest\`" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          echo "**Usage in workflows:**" >> $GITHUB_STEP_SUMMARY
+          echo "### Tags Created" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | Purpose |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ steps.tags.outputs.version_tag }}\` | Main version tag |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ steps.tags.outputs.full_tag }}\` | Version + SHA (immutable) |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ steps.tags.outputs.env_tag }}\` | Environment latest |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Usage in Workflows" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
-          echo "image_tag: ${{ steps.tags.outputs.arch_tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "# or" >> $GITHUB_STEP_SUMMARY
-          echo "image_tag: latest" >> $GITHUB_STEP_SUMMARY
+          echo "image_tag: ${{ steps.tags.outputs.version_tag }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  # =============================================================================
+  # PROMOTE: Re-tag existing image for another environment (no rebuild)
+  # =============================================================================
+  promote:
+    if: github.event.inputs.action == 'promote'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate inputs
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          SOURCE="${{ github.event.inputs.source_env }}"
+          TARGET="${{ github.event.inputs.environment }}"
+
+          if [ -z "$VERSION" ]; then
+            echo "❌ Error: Version is required for promote action"
+            exit 1
+          fi
+
+          if [ "$SOURCE" == "$TARGET" ]; then
+            echo "❌ Error: Source and target environment cannot be the same"
+            exit 1
+          fi
+
+          if [ "$TARGET" == "prod" ] && [ "$SOURCE" != "staging" ]; then
+            echo "⚠️  Warning: Promoting directly to prod from $SOURCE (not staging)"
+          fi
+
+          echo "✅ Promoting v${VERSION} from ${SOURCE} to ${TARGET}"
+
+      - name: Login to Azure Container Registry
+        if: github.event.inputs.push_to == 'acr' || github.event.inputs.push_to == 'both'
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Login to Docker Hub
+        if: github.event.inputs.push_to == 'dockerhub' || github.event.inputs.push_to == 'both'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Promote in ACR
+        if: github.event.inputs.push_to == 'acr' || github.event.inputs.push_to == 'both'
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          SOURCE="${{ github.event.inputs.source_env }}"
+          TARGET="${{ github.event.inputs.environment }}"
+
+          # Source tag
+          if [ "$SOURCE" == "prod" ]; then
+            SOURCE_TAG="v${VERSION}"
+          else
+            SOURCE_TAG="v${VERSION}-${SOURCE}"
+          fi
+
+          # Target tag
+          if [ "$TARGET" == "prod" ]; then
+            TARGET_TAG="v${VERSION}"
+          else
+            TARGET_TAG="v${VERSION}-${TARGET}"
+          fi
+
+          echo "🔄 Pulling ${{ env.ACR_IMAGE }}:${SOURCE_TAG}..."
+          docker pull ${{ env.ACR_IMAGE }}:${SOURCE_TAG}
+
+          echo "🏷️  Tagging as ${TARGET_TAG}..."
+          docker tag ${{ env.ACR_IMAGE }}:${SOURCE_TAG} ${{ env.ACR_IMAGE }}:${TARGET_TAG}
+          docker tag ${{ env.ACR_IMAGE }}:${SOURCE_TAG} ${{ env.ACR_IMAGE }}:${TARGET}
+
+          echo "📤 Pushing..."
+          docker push ${{ env.ACR_IMAGE }}:${TARGET_TAG}
+          docker push ${{ env.ACR_IMAGE }}:${TARGET}
+
+          echo "✅ Promoted in ACR:"
+          echo "   - ${{ env.ACR_IMAGE }}:${TARGET_TAG}"
+          echo "   - ${{ env.ACR_IMAGE }}:${TARGET}"
+
+      - name: Promote in Docker Hub
+        if: github.event.inputs.push_to == 'dockerhub' || github.event.inputs.push_to == 'both'
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          SOURCE="${{ github.event.inputs.source_env }}"
+          TARGET="${{ github.event.inputs.environment }}"
+
+          # Source tag
+          if [ "$SOURCE" == "prod" ]; then
+            SOURCE_TAG="v${VERSION}"
+          else
+            SOURCE_TAG="v${VERSION}-${SOURCE}"
+          fi
+
+          # Target tag
+          if [ "$TARGET" == "prod" ]; then
+            TARGET_TAG="v${VERSION}"
+          else
+            TARGET_TAG="v${VERSION}-${TARGET}"
+          fi
+
+          echo "🔄 Pulling ${{ env.DOCKERHUB_IMAGE }}:${SOURCE_TAG}..."
+          docker pull ${{ env.DOCKERHUB_IMAGE }}:${SOURCE_TAG}
+
+          echo "🏷️  Tagging as ${TARGET_TAG}..."
+          docker tag ${{ env.DOCKERHUB_IMAGE }}:${SOURCE_TAG} ${{ env.DOCKERHUB_IMAGE }}:${TARGET_TAG}
+          docker tag ${{ env.DOCKERHUB_IMAGE }}:${SOURCE_TAG} ${{ env.DOCKERHUB_IMAGE }}:${TARGET}
+
+          echo "📤 Pushing..."
+          docker push ${{ env.DOCKERHUB_IMAGE }}:${TARGET_TAG}
+          docker push ${{ env.DOCKERHUB_IMAGE }}:${TARGET}
+
+          echo "✅ Promoted in Docker Hub:"
+          echo "   - ${{ env.DOCKERHUB_IMAGE }}:${TARGET_TAG}"
+          echo "   - ${{ env.DOCKERHUB_IMAGE }}:${TARGET}"
+
+      - name: Promote Summary
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          SOURCE="${{ github.event.inputs.source_env }}"
+          TARGET="${{ github.event.inputs.environment }}"
+
+          echo "## 🚀 Docker Promote Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Promotion:** \`${SOURCE}\` → \`${TARGET}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### What happened" >> $GITHUB_STEP_SUMMARY
+          echo "The same Docker image was re-tagged without rebuilding." >> $GITHUB_STEP_SUMMARY
+          echo "This ensures the exact same code runs in ${TARGET} as tested in ${SOURCE}." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Usage" >> $GITHUB_STEP_SUMMARY
+          if [ "$TARGET" == "prod" ]; then
+            echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
+            echo "image_tag: v${VERSION}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
+            echo "image_tag: v${VERSION}-${TARGET}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi

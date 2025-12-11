@@ -101,9 +101,10 @@ FROM production AS training
 LABEL description="Intelligent Trading Bot - Training Mode"
 
 # Install additional training dependencies
-COPY requirements-train.txt /app/
+# Note: requirements-train.txt includes -r requirements-minimal.txt
+COPY requirements-minimal.txt requirements-train.txt /app/
 RUN pip install --no-cache-dir -r requirements-train.txt && \
-    rm requirements-train.txt
+    rm requirements-train.txt requirements-minimal.txt
 
 # Default command for training
 CMD ["python", "-m", "scripts.train", "--help"]
@@ -116,9 +117,10 @@ FROM training AS full
 LABEL description="Intelligent Trading Bot - Full (Development)"
 
 # Install all dependencies including TensorFlow and GCP
-COPY requirements-full.txt /app/
+# Note: requirements-full.txt includes -r requirements-train.txt which includes -r requirements-minimal.txt
+COPY requirements-minimal.txt requirements-train.txt requirements-full.txt /app/
 RUN pip install --no-cache-dir -r requirements-full.txt && \
-    rm requirements-full.txt
+    rm requirements-minimal.txt requirements-train.txt requirements-full.txt
 
 # Default command
 CMD ["bash", "-c", "echo 'ITB Container ready. Available modes: minimal, training, full'"]
