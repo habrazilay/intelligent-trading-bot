@@ -92,32 +92,38 @@ jobs:
           echo "📁 File Share: ${FILE_SHARE}"
           echo "🎯 Config: ${CONFIG_PATH}"
 
-      - name: Check and delete old container
+      - name: Check existing container
         id: cleanup
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
 
-          # Check if container exists
-          EXISTS=$(az container show \
+          # Check if container exists and get its state
+          CONTAINER_STATE=$(az container show \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --query "name" -o tsv 2>/dev/null || echo "")
+            --query "containers[0].instanceView.currentState.state" -o tsv 2>/dev/null || echo "")
 
-          if [ -n "$EXISTS" ]; then
-            echo "🧹 Found existing container, deleting..."
+          echo "container_state=${CONTAINER_STATE}" >> $GITHUB_OUTPUT
+
+          if [ -z "$CONTAINER_STATE" ]; then
+            echo "✅ No existing container found"
+            echo "reuse_container=false" >> $GITHUB_OUTPUT
+          elif [ "$CONTAINER_STATE" = "Running" ]; then
+            echo "♻️ Found running container - will reuse it!"
+            echo "reuse_container=true" >> $GITHUB_OUTPUT
+          else
+            echo "🧹 Found container in state '$CONTAINER_STATE' - deleting..."
             az container delete \
               --name "$CONTAINER_NAME" \
               --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
               --yes
-
-            # Wait for deletion to complete
             echo "⏳ Waiting for deletion..."
             sleep 10
-          else
-            echo "✅ No existing container found"
+            echo "reuse_container=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Verify resources and create container
+        if: steps.cleanup.outputs.reuse_container != 'true'
         timeout-minutes: 15
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
@@ -177,7 +183,12 @@ jobs:
             --query "{state:provisioningState,containerState:containers[0].instanceView.currentState.state}" \
             -o table
 
+      - name: Reuse existing container
+        if: steps.cleanup.outputs.reuse_container == 'true'
+        run: echo "♻️ Reusing existing running container"
+
       - name: Wait for container to be running
+        if: steps.cleanup.outputs.reuse_container != 'true'
         timeout-minutes: 5
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
