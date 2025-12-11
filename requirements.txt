@@ -2,6 +2,7 @@ numpy==2.1.*  # version limited by tensorflow and numba
 pandas==2.*  # version might be important for parsing timestamps
 numba  # For highlow label generator
 pyarrow  # If parquet is used. Alternatively fastparquet
+protobuf<5.0.0,>=3.20.0  # Fix for AttributeError: 'MessageFactory' with lightgbm/tensorflow
 
 apscheduler
 click
