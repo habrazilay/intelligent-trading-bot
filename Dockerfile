@@ -79,7 +79,7 @@ RUN rm -f /app/types.py || true
 
 # Data directories will be mounted from Azure File Share or local volumes
 # Do NOT create them here - they should be mounted at runtime:
-#   - Azure: Mount File Share (stitbdev/data-itb-5m → /app/DATA_ITB_5m)
+#   - Azure: Mount File Share using GitHub env vars (AZURE_STORAGE_ACCOUNT/AZURE_FILE_SHARE_5M)
 #   - Local: docker run -v $(pwd)/DATA_ITB_5m:/app/DATA_ITB_5m
 
 # Set Python path

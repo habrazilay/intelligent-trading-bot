@@ -18,8 +18,14 @@ Go to: **Settings** → **Secrets and variables** → **Actions**
 ### Docker Hub (for building and pushing images)
 | Secret Name | Example Value | Description |
 |-------------|---------------|-------------|
-| `DOCKER_USERNAME` | `yourname` | Your Docker Hub username |
-| `DOCKER_PASSWORD` | `dckr_pat_xxx` | Docker Hub access token |
+| `DOCKERHUB_USER` | `yourname` | Your Docker Hub username |
+| `DOCKERHUB_TOKEN` | `dckr_pat_xxx` | Docker Hub access token |
+
+### Azure Container Registry (ACR) - Optional
+| Secret Name | Example Value | Description |
+|-------------|---------------|-------------|
+| `ACR_USERNAME` | `itbacr` | Azure Container Registry username |
+| `ACR_PASSWORD` | `xxx...` | Azure Container Registry password |
 
 ### Binance API (for downloading trading data)
 | Secret Name | Example Value | Description |
@@ -31,7 +37,7 @@ Go to: **Settings** → **Secrets and variables** → **Actions**
 | Secret Name | Example Value | Description |
 |-------------|---------------|-------------|
 | `AZURE_CREDENTIALS` | `{"clientId":"..."}` | Azure service principal JSON |
-| `AZURE_STORAGE_ACCOUNT` | `stitbdev` | Azure Storage Account name |
+| `AZURE_STORAGE_KEY` | `xxx...` | Azure Storage Account key |
 
 ### Telegram (for notifications)
 | Secret Name | Example Value | Description |
@@ -41,17 +47,38 @@ Go to: **Settings** → **Secrets and variables** → **Actions**
 
 ---
 
-## 📝 Required Variables (Optional - for Azure Container Instances)
+## 📝 Required Variables (for Azure Container Instances)
 
-If you plan to deploy to **Azure Container Instances**, configure these variables:
+Configure these variables in **Environment: env** (Settings → Environments → env → Environment variables):
 
-| Variable Name | Example Value | Description |
-|---------------|---------------|-------------|
-| `ACR_LOGIN_SERVER` | `itbacr.azurecr.io` | Azure Container Registry URL |
-| `ACR_REPOSITORY` | `itb-bot` | Repository name in ACR |
-| `AZURE_RESOURCE_GROUP` | `rg-itb-dev` | Azure resource group |
-| `AZURE_REGION` | `eastus` | Azure deployment region |
-| `AZURE_CONTAINER_PREFIX` | `itb-bot` | Prefix for container instances |
+| Variable Name | Description |
+|---------------|-------------|
+| `ACR_LOGIN_SERVER` | Azure Container Registry URL |
+| `ACR_REPOSITORY` | Repository name in ACR |
+| `AZURE_RESOURCE_GROUP` | Azure resource group |
+| `AZURE_FILE_SHARE_1M` | File share name for 1-minute data |
+| `AZURE_FILE_SHARE_5M` | File share name for 5-minute data |
+| `AZURE_FILE_SHARE_1H` | File share name for 1-hour data |
+| `AZURE_STORAGE_ACCOUNT` | Azure Storage Account name |
+
+✅ **Already configured in your "env" environment!**
+
+### Using Environment Variables in Workflows
+
+To use these environment variables in GitHub Actions, add the `environment` key to your job:
+
+```yaml
+deploy-azure:
+  name: Deploy to Azure
+  runs-on: ubuntu-latest
+  environment: env  # This loads all variables from the "env" environment
+
+  steps:
+    - name: Example step
+      run: |
+        echo "Using ACR: ${{ vars.ACR_LOGIN_SERVER }}"
+        echo "Resource Group: ${{ vars.AZURE_RESOURCE_GROUP }}"
+```
 
 ---
 
@@ -86,32 +113,36 @@ az ad sp create-for-rbac \
 
 ---
 
-## 📋 Current Workflow Usage
+## 📋 Workflow Usage
 
-The `azure-pipeline.yml` currently uses these secrets:
+To use environment variables in your workflow, add `environment: env` to jobs that need Azure deployment:
 
-### Docker Build Job
 ```yaml
-username: ${{ secrets.DOCKER_USERNAME }}
-password: ${{ secrets.DOCKER_PASSWORD }}
+deploy-container-instance:
+  name: Deploy to Azure Container Instance
+  runs-on: ubuntu-latest
+  environment: env  # This is required to access env variables!
+
+  steps:
+    - name: Deploy container
+      run: |
+        az container create \
+          --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+          --image ${{ vars.ACR_LOGIN_SERVER }}/${{ vars.ACR_REPOSITORY }}:minimal \
+          --azure-file-volume-account-name ${{ vars.AZURE_STORAGE_ACCOUNT }} \
+          --azure-file-volume-share-name ${{ vars.AZURE_FILE_SHARE_5M }}
 ```
 
-### Download Data Job
-```yaml
-BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
-BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
-```
+### Secrets Usage (no environment needed)
 
-### Deploy to Azure Job
-```yaml
-creds: ${{ secrets.AZURE_CREDENTIALS }}
---account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-```
+Repository secrets can be used in any job without specifying environment:
 
-### Telegram Notifications
 ```yaml
-TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+- name: Login to Docker Hub
+  uses: docker/login-action@v3
+  with:
+    username: ${{ secrets.DOCKERHUB_USER }}
+    password: ${{ secrets.DOCKERHUB_TOKEN }}
 ```
 
 ---
