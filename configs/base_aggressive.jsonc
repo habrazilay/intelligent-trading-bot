@@ -24,11 +24,11 @@
   "symbol": "{symbol}",
 
   "merge_file_name":   "data.csv",
-  "feature_file_name": "features.csv",
-  "matrix_file_name":  "matrix.csv",
-  "predict_file_name": "predictions.csv",
-  "signal_file_name":  "signals.csv",
-  "signal_models_file_name": "signal_models",
+  "feature_file_name": "features_aggressive.csv",
+  "matrix_file_name":  "matrix_aggressive.csv",
+  "predict_file_name": "predictions_aggressive.csv",
+  "signal_file_name":  "signals_aggressive.csv",
+  "signal_models_file_name": "signal_models_aggressive",
 
   "model_folder": "MODELS_AGGRESSIVE",
   "description": "Aggressive strategy - GCP advanced ML",

@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 
 import asyncio
 
@@ -139,7 +139,7 @@ async def generate_transaction_stats():
 
     df = pd.read_csv(transaction_path, parse_dates=[0], header=None, names=["timestamp", "close", "profit", "status"], date_format="ISO8601")
 
-    mask = (df['timestamp'] >= (datetime.now() - timedelta(weeks=4)))
+    mask = (df['timestamp'] >= (datetime.now(timezone.utc) - timedelta(weeks=4)))
     df = df[max(mask.idxmax()-1, 0):]  # We add one previous row to use the previous close
 
     df["prev_close"] = df["close"].shift()
