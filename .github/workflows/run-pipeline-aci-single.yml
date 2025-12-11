@@ -1,112 +1,212 @@
-name: Run full pipeline in a single Azure Container Instance
+name: Run Full Pipeline in Azure Container Instance
 
 on:
   workflow_dispatch:
     inputs:
-      config_path:
-        description: "Path to JSONC config file (e.g. configs/btcusdt_1m_dev.jsonc)"
+      symbol:
+        description: 'Trading symbol (e.g., BTCUSDT, ETHUSDT)'
         required: true
-        default: "configs/btcusdt_1m_dev.jsonc"
+        default: 'BTCUSDT'
+      freq:
+        description: 'Timeframe (1m, 5m, 1h)'
+        required: true
+        type: choice
+        options:
+          - 1m
+          - 5m
+          - 1h
+        default: '5m'
+      strategy:
+        description: 'Strategy config'
+        required: true
+        type: choice
+        options:
+          - conservative
+          - aggressive
+          - staging
+          - quick
+        default: 'conservative'
       image_tag:
-        description: "Docker image tag to use (e.g. habrazilay/itb-bot:amd64-1764313462)"
-        required: true
-        default: "habrazilay/itb-bot:amd64-1764313462"
-      run_download:
-        description: "Run scripts.download_binance inside Azure? (Binance may block ACI IP)"
-        required: true
-        default: "false"
+        description: 'Docker image tag (leave empty for dev-training)'
+        required: false
+        default: ''
 
 env:
-  DOCKER_IMAGE: ${{ github.event.inputs.image_tag }}
+  ACR_LOGIN_SERVER: itbacr.azurecr.io
+  ACR_IMAGE: itbacr.azurecr.io/itb-bot
   AZURE_RESOURCE_GROUP: rg-itb-dev
-  AZURE_CONTAINER_PREFIX: itb-bot
-  AZURE_STORAGE_ACCOUNT: stitbdev
-  AZURE_FILE_SHARE: data-itb-1m
-  DATA_MOUNT_PATH: /app/DATA_ITB_1m
 
 jobs:
   run-pipeline:
+    name: Full Pipeline in ACI
     runs-on: ubuntu-latest
+    environment: dev
     env:
-      CONFIG_PATH: ${{ github.event.inputs.config_path }}
-      RUN_DOWNLOAD: ${{ github.event.inputs.run_download }}
+      SYMBOL: ${{ github.event.inputs.symbol }}
+      FREQ: ${{ github.event.inputs.freq }}
+      STRATEGY: ${{ github.event.inputs.strategy }}
+      CONFIG_PATH: configs/base_${{ github.event.inputs.strategy }}.jsonc
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || 'dev-training' }}
+
     steps:
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Run full pipeline in single ACI container
+      - name: Set variables
+        id: vars
         run: |
-          CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-pipeline
+          CONTAINER_NAME="itb-pipeline-${SYMBOL,,}-${FREQ}"
+          FILE_SHARE="data-itb-${FREQ}"
+          DATA_MOUNT="/app/DATA_ITB_${FREQ}"
 
-          echo "🧹 Deletando container antigo (se existir)..."
+          echo "container_name=${CONTAINER_NAME}" >> $GITHUB_OUTPUT
+          echo "file_share=${FILE_SHARE}" >> $GITHUB_OUTPUT
+          echo "data_mount=${DATA_MOUNT}" >> $GITHUB_OUTPUT
+
+          echo "📦 Container: ${CONTAINER_NAME}"
+          echo "📁 File Share: ${FILE_SHARE}"
+          echo "🎯 Config: ${CONFIG_PATH}"
+
+      - name: Run full pipeline in ACI
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          FILE_SHARE="${{ steps.vars.outputs.file_share }}"
+          DATA_MOUNT="${{ steps.vars.outputs.data_mount }}"
+
+          echo "🧹 Deleting old container (if exists)..."
           az container delete \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
-          echo "🚀 Criando container $CONTAINER_NAME usando imagem $DOCKER_IMAGE..."
+          echo "🚀 Creating container $CONTAINER_NAME..."
 
           az container create \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
-            --image "$DOCKER_IMAGE" \
+            --image "${{ env.ACR_IMAGE }}:${{ env.IMAGE_TAG }}" \
             --os-type Linux \
-            --registry-login-server index.docker.io \
-            --registry-username "${{ secrets.DOCKERHUB_USER }}" \
-            --registry-password "${{ secrets.DOCKERHUB_TOKEN }}" \
+            --registry-login-server "${{ env.ACR_LOGIN_SERVER }}" \
+            --registry-username "${{ secrets.ACR_USERNAME }}" \
+            --registry-password "${{ secrets.ACR_PASSWORD }}" \
             --restart-policy Never \
-            --cpu 1 \
-            --memory 2 \
+            --cpu 2 \
+            --memory 4 \
             --environment-variables \
-              BINANCE_API_KEY="${{ secrets.BINANCE_API_KEY }}" \
-              BINANCE_API_SECRET="${{ secrets.BINANCE_API_SECRET }}" \
-              RUN_DOWNLOAD="${{ env.RUN_DOWNLOAD }}" \
               CONFIG_PATH="${{ env.CONFIG_PATH }}" \
-            --azure-file-volume-share-name "${{ env.AZURE_FILE_SHARE }}" \
-            --azure-file-volume-account-name "${{ env.AZURE_STORAGE_ACCOUNT }}" \
+              SYMBOL="${{ env.SYMBOL }}" \
+              FREQ="${{ env.FREQ }}" \
+            --azure-file-volume-share-name "$FILE_SHARE" \
+            --azure-file-volume-account-name "${{ vars.AZURE_STORAGE_ACCOUNT }}" \
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
-            --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
+            --azure-file-volume-mount-path "$DATA_MOUNT" \
             --command-line "bash -lc '
               set -e
 
-              echo \"CONFIG_PATH=\$CONFIG_PATH\"
-              echo \"RUN_DOWNLOAD=\$RUN_DOWNLOAD\"
-              echo \"📁 DATA folder: ${DATA_MOUNT_PATH}\"
+              echo \"========================================\"
+              echo \"🚀 ITB Full Pipeline\"
+              echo \"========================================\"
+              echo \"Config: \$CONFIG_PATH\"
+              echo \"Symbol: \$SYMBOL\"
+              echo \"Freq: \$FREQ\"
+              echo \"Data: ${DATA_MOUNT}/\$SYMBOL\"
+              echo \"========================================\"
 
-              if [ \"\$RUN_DOWNLOAD\" = \"true\" ]; then
-                echo \"⬇️  Rodando download_binance (atenção: Binance pode bloquear IP da Azure)...\"
-                python -m scripts.download_binance -c \"\$CONFIG_PATH\"
-              else
-                echo \"⏭️  PULANDO download_binance (RUN_DOWNLOAD=false). Assumindo klines.parquet pronto no File Share.\"
-              fi
+              cd /app
 
-              echo \"🔄 Rodando merge_new...\"
-              python -m scripts.merge_new -c \"\$CONFIG_PATH\"
+              echo \"\"
+              echo \"📊 Step 1/6: Merge...\"
+              python -m scripts.merge -c \"\$CONFIG_PATH\" --symbol \"\$SYMBOL\" --freq \"\$FREQ\"
 
-              echo \"🧮 Gerando features...\"
-              python -m scripts.features_new -c \"\$CONFIG_PATH\"
+              echo \"\"
+              echo \"🧮 Step 2/6: Features...\"
+              python -m scripts.features -c \"\$CONFIG_PATH\" --symbol \"\$SYMBOL\" --freq \"\$FREQ\"
 
-              echo \"🏷  Gerando labels...\"
-              python -m scripts.labels_new -c \"\$CONFIG_PATH\"
+              echo \"\"
+              echo \"🏷️ Step 3/6: Labels...\"
+              python -m scripts.labels -c \"\$CONFIG_PATH\" --symbol \"\$SYMBOL\" --freq \"\$FREQ\"
 
-              echo \"🎓 Treinando modelos...\"
-              python -m scripts.train -c \"\$CONFIG_PATH\"
+              echo \"\"
+              echo \"🎓 Step 4/6: Train...\"
+              python -m scripts.train -c \"\$CONFIG_PATH\" --symbol \"\$SYMBOL\" --freq \"\$FREQ\"
 
-              echo \"🔮 Gerando previsões...\"
-              python -m scripts.predict -c \"\$CONFIG_PATH\"
+              echo \"\"
+              echo \"🔮 Step 5/6: Predict...\"
+              python -m scripts.predict -c \"\$CONFIG_PATH\" --symbol \"\$SYMBOL\" --freq \"\$FREQ\"
 
-              echo \"🚦 Gerando sinais...\"
-              python -m scripts.signals -c \"\$CONFIG_PATH\"
+              echo \"\"
+              echo \"🚦 Step 6/6: Signals...\"
+              python -m scripts.signals -c \"\$CONFIG_PATH\" --symbol \"\$SYMBOL\" --freq \"\$FREQ\"
 
-              echo \"📤 Rodando outputs...\"
-              python -m scripts.output -c \"\$CONFIG_PATH\"
-
-              echo \"✅ Pipeline completo dentro do container \$CONTAINER_NAME\"
+              echo \"\"
+              echo \"========================================\"
+              echo \"✅ Pipeline complete!\"
+              echo \"========================================\"
             '"
 
-          echo "📜 Logs do container:"
+      - name: Wait for container to complete
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+
+          echo "⏳ Waiting for container to complete..."
+
+          while true; do
+            STATE=$(az container show \
+              --name "$CONTAINER_NAME" \
+              --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+              --query "containers[0].instanceView.currentState.state" -o tsv)
+
+            echo "Container state: $STATE"
+
+            if [ "$STATE" = "Terminated" ]; then
+              EXIT_CODE=$(az container show \
+                --name "$CONTAINER_NAME" \
+                --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+                --query "containers[0].instanceView.currentState.exitCode" -o tsv)
+
+              echo "Container finished with exit code: $EXIT_CODE"
+              break
+            fi
+
+            sleep 30
+          done
+
+      - name: Get container logs
+        if: always()
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+
+          echo "📜 Container logs:"
           az container logs \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
+
+      - name: Cleanup container
+        if: always()
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+
+          echo "🧹 Cleaning up container..."
+          az container delete \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --yes || true
+
+      - name: Pipeline Summary
+        run: |
+          echo "## 🚀 ACI Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Symbol:** \`${{ env.SYMBOL }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Timeframe:** \`${{ env.FREQ }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Strategy:** \`${{ env.STRATEGY }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${{ env.ACR_IMAGE }}:${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Steps Executed" >> $GITHUB_STEP_SUMMARY
+          echo "1. Merge" >> $GITHUB_STEP_SUMMARY
+          echo "2. Features" >> $GITHUB_STEP_SUMMARY
+          echo "3. Labels" >> $GITHUB_STEP_SUMMARY
+          echo "4. Train" >> $GITHUB_STEP_SUMMARY
+          echo "5. Predict" >> $GITHUB_STEP_SUMMARY
+          echo "6. Signals" >> $GITHUB_STEP_SUMMARY
