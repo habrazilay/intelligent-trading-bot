@@ -30,6 +30,15 @@ on:
         description: 'Docker image tag (leave empty for dev-training)'
         required: false
         default: ''
+      keep_container:
+        description: 'Keep container after completion (for debugging)'
+        required: false
+        type: boolean
+        default: false
+      location:
+        description: 'Azure region (leave empty for resource group default)'
+        required: false
+        default: ''
 
 jobs:
   run-pipeline:
@@ -65,27 +74,66 @@ jobs:
           echo "📁 File Share: ${FILE_SHARE}"
           echo "🎯 Config: ${CONFIG_PATH}"
 
-      - name: Delete old container
+      - name: Check and delete old container
+        id: cleanup
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
-          echo "🧹 Deleting old container (if exists)..."
-          az container delete \
+
+          # Check if container exists
+          EXISTS=$(az container show \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --yes 2>/dev/null || true
+            --query "name" -o tsv 2>/dev/null || echo "")
 
-          # Wait for deletion to complete
-          sleep 10
+          if [ -n "$EXISTS" ]; then
+            echo "🧹 Found existing container, deleting..."
+            az container delete \
+              --name "$CONTAINER_NAME" \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --yes
 
-      - name: Create container (async)
+            # Wait for deletion to complete
+            echo "⏳ Waiting for deletion..."
+            sleep 10
+          else
+            echo "✅ No existing container found"
+          fi
+
+      - name: Verify resources and create container
+        timeout-minutes: 15
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
           FILE_SHARE="${{ steps.vars.outputs.file_share }}"
           DATA_MOUNT="${{ steps.vars.outputs.data_mount }}"
 
-          echo "🚀 Creating container $CONTAINER_NAME (async)..."
+          # Get storage account location (must match ACI location for file share mount)
+          STORAGE_LOCATION=$(az storage account show \
+            --name "${{ vars.AZURE_STORAGE_ACCOUNT }}" \
+            --query "primaryLocation" -o tsv)
 
+          # Use storage account location to ensure file share mount works
+          if [ -n "${{ github.event.inputs.location }}" ]; then
+            LOCATION="${{ github.event.inputs.location }}"
+            echo "⚠️  Using custom location: $LOCATION"
+            echo "    Storage account is in: $STORAGE_LOCATION"
+            echo "    If different, file share mount will fail!"
+          else
+            LOCATION="$STORAGE_LOCATION"
+          fi
+
+          echo ""
+          echo "🚀 Creating container $CONTAINER_NAME..."
+          echo "   Image: ${{ env.ACR_IMAGE }}:${{ env.IMAGE_TAG }}"
+          echo "   Resource Group: ${{ vars.AZURE_RESOURCE_GROUP }}"
+          echo "   Location: $LOCATION"
+          echo "   Storage: ${{ vars.AZURE_STORAGE_ACCOUNT }} ($STORAGE_LOCATION)"
+
+          echo ""
+
+          # Create container (blocking - waits for provisioning)
+          # Using --output table for cleaner logs
           az container create \
+            --location "$LOCATION" \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --image "${{ env.ACR_IMAGE }}:${{ env.IMAGE_TAG }}" \
@@ -104,7 +152,7 @@ jobs:
             --azure-file-volume-account-name "${{ vars.AZURE_STORAGE_ACCOUNT }}" \
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --azure-file-volume-mount-path "$DATA_MOUNT" \
-            --no-wait \
+            --output table \
             --command-line "bash -lc '
               set -e
 
@@ -149,39 +197,6 @@ jobs:
               echo \"========================================\"
             '"
 
-      - name: Wait for container to be ready
-        run: |
-          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
-          MAX_WAIT=600  # 10 minutes max for provisioning
-          ELAPSED=0
-
-          echo "⏳ Waiting for container to be provisioned..."
-
-          while [ $ELAPSED -lt $MAX_WAIT ]; do
-            PROVISIONING_STATE=$(az container show \
-              --name "$CONTAINER_NAME" \
-              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-              --query "provisioningState" -o tsv 2>/dev/null || echo "Creating")
-
-            echo "Provisioning state: $PROVISIONING_STATE (${ELAPSED}s elapsed)"
-
-            if [ "$PROVISIONING_STATE" = "Succeeded" ]; then
-              echo "✅ Container provisioned successfully!"
-              break
-            elif [ "$PROVISIONING_STATE" = "Failed" ]; then
-              echo "❌ Container provisioning failed!"
-              exit 1
-            fi
-
-            sleep 15
-            ELAPSED=$((ELAPSED + 15))
-          done
-
-          if [ $ELAPSED -ge $MAX_WAIT ]; then
-            echo "❌ Timeout waiting for container to provision"
-            exit 1
-          fi
-
       - name: Wait for container to complete
         timeout-minutes: 60
         run: |
@@ -215,20 +230,26 @@ jobs:
             sleep 30
           done
 
-      - name: Get container logs
+      - name: Get container info and logs
         if: always()
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
 
+          echo "📊 Container info:"
+          az container show \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --query "{state:provisioningState, containerState:containers[0].instanceView.currentState, events:containers[0].instanceView.events}" \
+            -o json 2>/dev/null || echo "⚠️ Container info not available"
+
+          echo ""
           echo "📜 Container logs:"
-          # Wait a bit for logs to be available
-          sleep 5
           az container logs \
             --name "$CONTAINER_NAME" \
-            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" 2>/dev/null || echo "⚠️ Logs not available yet"
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" 2>/dev/null || echo "⚠️ Logs not available"
 
       - name: Cleanup container
-        if: always()
+        if: always() && github.event.inputs.keep_container != 'true'
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
 
@@ -237,6 +258,14 @@ jobs:
             --name "$CONTAINER_NAME" \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --yes || true
+
+      - name: Keep container notice
+        if: always() && github.event.inputs.keep_container == 'true'
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          echo "📦 Container kept for debugging: $CONTAINER_NAME"
+          echo "   View logs: az container logs --name $CONTAINER_NAME --resource-group ${{ vars.AZURE_RESOURCE_GROUP }}"
+          echo "   Delete: az container delete --name $CONTAINER_NAME --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} --yes"
 
       - name: Pipeline Summary
         run: |
