@@ -32,6 +32,7 @@ on:
         options:
           - conservative
           - aggressive
+          - staging
           - quick
         default: 'conservative'
       pipeline_mode:
