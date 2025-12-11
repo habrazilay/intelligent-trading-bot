@@ -65,19 +65,25 @@ jobs:
           echo "📁 File Share: ${FILE_SHARE}"
           echo "🎯 Config: ${CONFIG_PATH}"
 
-      - name: Run full pipeline in ACI
+      - name: Delete old container
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          echo "🧹 Deleting old container (if exists)..."
+          az container delete \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --yes 2>/dev/null || true
+
+          # Wait for deletion to complete
+          sleep 10
+
+      - name: Create container (async)
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
           FILE_SHARE="${{ steps.vars.outputs.file_share }}"
           DATA_MOUNT="${{ steps.vars.outputs.data_mount }}"
 
-          echo "🧹 Deleting old container (if exists)..."
-          az container delete \
-            --name "$CONTAINER_NAME" \
-            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --yes || true
-
-          echo "🚀 Creating container $CONTAINER_NAME..."
+          echo "🚀 Creating container $CONTAINER_NAME (async)..."
 
           az container create \
             --name "$CONTAINER_NAME" \
@@ -98,6 +104,7 @@ jobs:
             --azure-file-volume-account-name "${{ vars.AZURE_STORAGE_ACCOUNT }}" \
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --azure-file-volume-mount-path "$DATA_MOUNT" \
+            --no-wait \
             --command-line "bash -lc '
               set -e
 
@@ -142,17 +149,51 @@ jobs:
               echo \"========================================\"
             '"
 
+      - name: Wait for container to be ready
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          MAX_WAIT=600  # 10 minutes max for provisioning
+          ELAPSED=0
+
+          echo "⏳ Waiting for container to be provisioned..."
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            PROVISIONING_STATE=$(az container show \
+              --name "$CONTAINER_NAME" \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --query "provisioningState" -o tsv 2>/dev/null || echo "Creating")
+
+            echo "Provisioning state: $PROVISIONING_STATE (${ELAPSED}s elapsed)"
+
+            if [ "$PROVISIONING_STATE" = "Succeeded" ]; then
+              echo "✅ Container provisioned successfully!"
+              break
+            elif [ "$PROVISIONING_STATE" = "Failed" ]; then
+              echo "❌ Container provisioning failed!"
+              exit 1
+            fi
+
+            sleep 15
+            ELAPSED=$((ELAPSED + 15))
+          done
+
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "❌ Timeout waiting for container to provision"
+            exit 1
+          fi
+
       - name: Wait for container to complete
+        timeout-minutes: 60
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
 
-          echo "⏳ Waiting for container to complete..."
+          echo "⏳ Waiting for pipeline to complete..."
 
           while true; do
             STATE=$(az container show \
               --name "$CONTAINER_NAME" \
               --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-              --query "containers[0].instanceView.currentState.state" -o tsv)
+              --query "containers[0].instanceView.currentState.state" -o tsv 2>/dev/null || echo "Waiting")
 
             echo "Container state: $STATE"
 
@@ -163,6 +204,11 @@ jobs:
                 --query "containers[0].instanceView.currentState.exitCode" -o tsv)
 
               echo "Container finished with exit code: $EXIT_CODE"
+
+              if [ "$EXIT_CODE" != "0" ]; then
+                echo "❌ Pipeline failed with exit code: $EXIT_CODE"
+                exit 1
+              fi
               break
             fi
 
@@ -175,9 +221,11 @@ jobs:
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
 
           echo "📜 Container logs:"
+          # Wait a bit for logs to be available
+          sleep 5
           az container logs \
             --name "$CONTAINER_NAME" \
-            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}"
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" 2>/dev/null || echo "⚠️ Logs not available yet"
 
       - name: Cleanup container
         if: always()
