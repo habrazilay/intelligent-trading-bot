@@ -215,7 +215,9 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
 
         # Escolhe o mapeamento de colunas adequado para esta função TALIB
         fn_columns = columns
-        # Caso especial: ATR precisa explicitamente de high/low/close
+
+        # Special cases: Some TA-Lib functions require specific named inputs
+        # ATR: high, low, close
         if (
             isinstance(original_column_names, list)
             and len(original_column_names) == 3
@@ -225,6 +227,30 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
                 "high": df[original_column_names[0]].interpolate(),
                 "low": df[original_column_names[1]].interpolate(),
                 "close": df[original_column_names[2]].interpolate(),
+            }
+
+        # OBV: real (close), volume
+        elif (
+            isinstance(original_column_names, list)
+            and len(original_column_names) == 2
+            and func_name.upper() == "OBV"
+        ):
+            fn_columns = {
+                "real": df[original_column_names[0]].interpolate(),
+                "volume": df[original_column_names[1]].interpolate(),
+            }
+
+        # MFI: high, low, close, volume
+        elif (
+            isinstance(original_column_names, list)
+            and len(original_column_names) == 4
+            and func_name.upper() == "MFI"
+        ):
+            fn_columns = {
+                "high": df[original_column_names[0]].interpolate(),
+                "low": df[original_column_names[1]].interpolate(),
+                "close": df[original_column_names[2]].interpolate(),
+                "volume": df[original_column_names[3]].interpolate(),
             }
 
         # Determine if the function support stream mode
