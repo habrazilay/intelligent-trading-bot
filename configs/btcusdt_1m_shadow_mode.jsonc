@@ -177,11 +177,30 @@
     "trader_binance": true,
 
     "no_trades_only_data_processing": false,
-    "test_order_before_submit": true,
+    "test_order_before_submit": true,       // LIVE TRADE: desabilitado para executar ordem real diretamente
     "simulate_order_execution": false,
 
+    // Shadow mode: bypass balance-based status check to allow order creation
+    // When true, allows BUY orders even if BTC value > USDT (status="BOUGHT")
+    // Set to true for testing with mixed balances
+    "shadow_mode": true,
+
+    // Force real trade: when true, shadow_mode will execute real orders (not just test)
+    // Use with caution! This will place real orders on Binance
+    "force_real_trade": false,
+
+    // Order type: "LIMIT" or "MARKET"
+    // LIMIT: Places order at adjusted price (limit_price_adjustment), may not fill immediately
+    // MARKET: Executes immediately at current market price
+    "order_type": "LIMIT",
+
+    // Native TP/SL: Use Binance OCO orders for Take Profit and Stop Loss
+    // When true, after a BUY fills, automatically places an OCO sell order with TP/SL
+    // Uses take_profit_percent and stop_loss_percent from risk_management section
+    "use_native_tp_sl": false,
+
     "percentage_used_for_trade": 2.0,       // 2% do saldo de USDT
-    "min_notional_usdt": 5.0,               // Binance não aceita menos que ~US$5 por ordem
+    "min_notional_usdt": 6.0,               // Binance mínimo é $5, usamos $6 para margem de segurança
     "min_balance_usdt_for_percentage": 500.0,  // abaixo disso, ignora porcentagem e usa min_notional como referência
     "limit_price_adjustment": 0.002    // 0.2% pra cima/baixo
   },

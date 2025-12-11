@@ -1,5 +1,6 @@
 {
   // === EXECUÇÃO GERAL ======================================================
+  // PRODUCTION MODE - REAL TRADING com ordens MARKET e TP/SL nativo
 
   "train": false, // If true (offline). Use false for predict only (online) mode with only latest data
   "venue": "binance",
@@ -25,7 +26,7 @@
   "signal_models_file_name": "signal_models",
 
   "model_folder": "MODELS",
-  "description": "BTCUSDT 1 min strategy",
+  "description": "BTCUSDT 1 min strategy - PRODUCTION (real trading)",
   "freq": "1m",           // frequência Binance
   "pandas_freq": "1min",  // frequência Pandas
   "time_column": "timestamp",
@@ -50,9 +51,6 @@
 
   // Interpolação opcional no merge
   "merge_interpolate": false,
-  // "merge_interpolate": true,
-  // "merge_interpolate_columns": ["close"],   // colunas que podem ser interpoladas
-  // "merge_interpolate_max_gap": 3           // máximo de candles seguidos interpolados
 
   // === FEATURES ===========================================================
 
@@ -72,11 +70,6 @@
       "config":{"columns":["high","low","close"],"functions":["ATR"],"windows":[14]}},
     { "generator":"talib",
       "config":{"columns":["close"],"functions":["STDDEV"],"windows":[20,60]}}
-
-    // Exemplo custom
-    // { "generator":"common.my_feature_example:my_feature_example",
-    //   "config":{"columns":"close","parameter":2.0,"names":"close_add"}}
-
   ],
 
   // === LABELS =============================================================
@@ -108,12 +101,10 @@
 
   // === TREINO =============================================================
 
-  // Mantém compatibilidade com o sample: orquestra o uso de train_features/labels/algorithms
   "train_feature_sets": [
     {
       "generator": "train_features",
       "config": {
-        // Usa os campos: train_features, labels, algorithms
       }
     }
   ],
@@ -135,14 +126,6 @@
       "params":{"is_scale":true},
       "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":1000}
     }
-
-    // LightGBM – bom para tabular, não exige scaling
-    // {
-    //   "name":"lgbm",
-    //   "algo":"lgbm",
-    //   "params":{},
-    //   "train":{"num_leaves":31,"learning_rate":0.05,"n_estimators":300,"max_depth":-1}
-    // }
   ],
 
   // === SINAIS ==============================================================
@@ -172,30 +155,34 @@
   ],
 
   // === LIVE TRADING =============================================
+  // PRODUCTION: Trading real com ordens MARKET e TP/SL nativo
 
   "trade_model": {
     "trader_binance": true,
 
     "no_trades_only_data_processing": false,
-    "test_order_before_submit": true,       // LIVE TRADE: desabilitado para executar ordem real diretamente
+    "test_order_before_submit": false,      // PRODUCTION: executa ordem diretamente
     "simulate_order_execution": false,
 
-    // Shadow mode: bypass balance-based status check to allow order creation
-    // When true, allows BUY orders even if BTC value > USDT (status="BOUGHT")
-    // Set to true for testing with mixed balances
-    "shadow_mode": true,
-
-    // Force real trade: when true, shadow_mode will execute real orders (not just test)
-    // Use with caution! This will place real orders on Binance
+    // Shadow mode desabilitado para produção
+    "shadow_mode": false,
     "force_real_trade": false,
 
+    // MARKET: Execução imediata ao preço de mercado (sem risco de ordem não preenchida)
+    "order_type": "MARKET",
+
+    // TP/SL nativo via OCO: após BUY, cria automaticamente ordem OCO com TP e SL
+    // Usa take_profit_percent e stop_loss_percent do risk_management
+    "use_native_tp_sl": true,
+
     "percentage_used_for_trade": 2.0,       // 2% do saldo de USDT
-    "min_notional_usdt": 5.0,               // Binance não aceita menos que ~US$5 por ordem
-    "min_balance_usdt_for_percentage": 500.0,  // abaixo disso, ignora porcentagem e usa min_notional como referência
-    "limit_price_adjustment": 0.002    // 0.2% pra cima/baixo
+    "min_notional_usdt": 6.0,               // Binance mínimo é $5, usamos $6 para margem
+    "min_balance_usdt_for_percentage": 500.0,
+    "limit_price_adjustment": 0.002         // Não usado com MARKET, mas mantido para compatibilidade
   },
 
   // === RISK MANAGEMENT =============================================
+  // IMPORTANTE: TP/SL usados pelo OCO nativo quando use_native_tp_sl=true
 
   "risk_management": {
     // Stop-Loss: fecha posição se perda exceder esse percentual
@@ -204,8 +191,7 @@
     // Take-Profit: fecha posição se lucro exceder esse percentual
     "take_profit_percent": 3.0,
 
-    // Trailing Stop (opcional): se definido, ativa após trailing_stop_activation % de lucro
-    // e fecha se preço cair trailing_stop_percent % do pico
+    // Trailing Stop (opcional)
     // "trailing_stop_percent": 1.0,
     // "trailing_stop_activation": 1.5,
 
@@ -224,13 +210,6 @@
   // === SAÍDAS & NOTIFICAÇÕES =============================================
 
   "output_sets": [
-    // {
-    //   "generator":"score_notification_model",
-    //   "config":{
-    //     "score_notification":true,
-    //     "score_column_names":["trade_score"]
-    //   }
-    // },
     {
       "generator":"trader_simulation",
       "config":{
@@ -245,7 +224,7 @@
         "sell_signal_column":"sell_signal",
         "percentage_used_for_trade":2.0
       }
-    },
+    }
   ],
 
   // === OTIMIZAÇÃO DE THRESHOLDS ===========================================

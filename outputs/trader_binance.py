@@ -16,6 +16,7 @@ from binance.enums import (
     ORDER_STATUS_REJECTED,
     ORDER_STATUS_EXPIRED,
     ORDER_TYPE_LIMIT,
+    ORDER_TYPE_MARKET,
     TIME_IN_FORCE_GTC,
     SIDE_BUY,
     SIDE_SELL,
@@ -209,9 +210,11 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
     # When shadow_mode is True, BUY signals will create test orders even if status is "BOUGHT"
     trade_model = config.get("trade_model", {})
     shadow_mode = trade_model.get("shadow_mode", False)
+    force_real_trade = trade_model.get("force_real_trade", False)
 
     # Log the decision-making process
-    log.info("Trade decision: status=%s, signal_side=%s, shadow_mode=%s", status, signal_side, shadow_mode)
+    log.info("Trade decision: status=%s, signal_side=%s, shadow_mode=%s, force_real_trade=%s",
+             status, signal_side, shadow_mode, force_real_trade)
 
     # Determine if we should attempt to create an order
     should_buy = (status == "SOLD" and signal_side == "BUY")
@@ -232,9 +235,12 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
             log.info("No BUY order created; keeping status as %s.", App.status)
         elif model.get("no_trades_only_data_processing"):
             log.info("SKIP TRADING due to 'no_trades_only_data_processing' parameter True")
-        elif shadow_mode:
+        elif shadow_mode and not force_real_trade:
             log.info("SHADOW MODE: Test order created but not changing status")
         else:
+            # Real trade executed (or shadow_mode with force_real_trade)
+            if shadow_mode and force_real_trade:
+                log.info("SHADOW MODE + FORCE REAL TRADE: Order executed, changing status to BUYING")
             App.status = "BUYING"
     elif should_sell:
         order = await new_limit_order(side=SIDE_SELL)
@@ -243,9 +249,12 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
             log.info("No SELL order created; keeping status as %s.", App.status)
         elif model.get("no_trades_only_data_processing"):
             log.info("SKIP TRADING due to 'no_trades_only_data_processing' parameter True")
-        elif shadow_mode:
+        elif shadow_mode and not force_real_trade:
             log.info("SHADOW MODE: Test order created but not changing status")
         else:
+            # Real trade executed (or shadow_mode with force_real_trade)
+            if shadow_mode and force_real_trade:
+                log.info("SHADOW MODE + FORCE REAL TRADE: Order executed, changing status to SELLING")
             App.status = "SELLING"
     elif signal_side in ("BUY", "SELL"):
         log.info("Signal %s ignored: current status is %s (need %s to act on this signal)",
@@ -520,25 +529,55 @@ async def new_limit_order(side):
     else:
         return None
 
-    notional = quantity * price
+    # Round quantity to 5 decimal places (Binance LOT_SIZE for BTCUSDT)
+    quantity_str = round_down_str(quantity, 5)
+    quantity_rounded = Decimal(quantity_str)
+
+    # Check notional AFTER rounding to ensure it meets Binance minimum ($5)
+    notional = quantity_rounded * price
+    binance_min_notional = Decimal("5.0")  # Binance NOTIONAL filter minimum
+
+    if notional < binance_min_notional:
+        log.warning(
+            "Notional after rounding (%.4f) is below Binance minimum ($5). "
+            "Adjusting quantity upward.",
+            float(notional),
+        )
+        # Calculate minimum quantity needed to meet $5 notional
+        min_quantity = binance_min_notional / price
+        # Round UP to 5 decimals to ensure we exceed $5
+        quantity_str = round_str(min_quantity + Decimal("0.00001"), 5)
+        quantity_rounded = Decimal(quantity_str)
+        notional = quantity_rounded * price
+
+    # Determine order type from config (default: LIMIT)
+    order_type = trade_model.get("order_type", "LIMIT").upper()
+
     log.info(
-        "New limit order params | side=%s price=%s quantity=%s notional_usdt=%.4f",
+        "New order params | type=%s side=%s price=%s quantity=%s notional_usdt=%.4f",
+        order_type,
         side,
         price_str,
-        round_str(quantity, 8),
+        quantity_str,
         float(notional),
     )
 
-    quantity_str = round_down_str(quantity, 5)
-
-    order_spec = dict(
-        symbol=symbol,
-        side=side,
-        type=ORDER_TYPE_LIMIT,
-        timeInForce=TIME_IN_FORCE_GTC,
-        quantity=quantity_str,
-        price=price_str,
-    )
+    if order_type == "MARKET":
+        order_spec = dict(
+            symbol=symbol,
+            side=side,
+            type=ORDER_TYPE_MARKET,
+            quantity=quantity_str,
+        )
+    else:  # Default to LIMIT
+        order_spec = dict(
+            symbol=symbol,
+            side=side,
+            type=ORDER_TYPE_LIMIT,
+            timeInForce=TIME_IN_FORCE_GTC,
+            quantity=quantity_str,
+            price=price_str,
+        )
 
     if trade_model.get("no_trades_only_data_processing"):
         log.info("NOT executed order spec (no_trades_only_data_processing=True): %s", order_spec)
@@ -552,7 +591,87 @@ async def new_limit_order(side):
     App.order = order
     App.order_time = now_ts
 
+    # If BUY order executed and TP/SL is configured, place OCO sell order
+    if side == SIDE_BUY and order.get("status") == ORDER_STATUS_FILLED:
+        await _place_oco_tp_sl(order, trade_model)
+
     return order
+
+
+async def _place_oco_tp_sl(buy_order: dict, trade_model: dict) -> None:
+    """
+    Place an OCO (One-Cancels-Other) order with Take Profit and Stop Loss
+    after a BUY order is filled.
+
+    OCO order includes:
+    - Limit sell at take_profit price (TP)
+    - Stop-limit sell at stop_loss price (SL)
+    """
+    risk_config = App.config.get("risk_management", {})
+    tp_percent = risk_config.get("take_profit_percent")
+    sl_percent = risk_config.get("stop_loss_percent")
+
+    # Check if native TP/SL is enabled
+    if not trade_model.get("use_native_tp_sl", False):
+        return
+
+    if not tp_percent or not sl_percent:
+        log.warning("Native TP/SL enabled but take_profit_percent or stop_loss_percent not configured")
+        return
+
+    try:
+        # Get entry price and quantity from the filled order
+        entry_price = Decimal(str(buy_order.get("price", "0")))
+        # For market orders, use avgPrice or cummulativeQuoteQty/executedQty
+        if entry_price == 0:
+            executed_qty = Decimal(str(buy_order.get("executedQty", "0")))
+            cumm_quote = Decimal(str(buy_order.get("cummulativeQuoteQty", "0")))
+            if executed_qty > 0 and cumm_quote > 0:
+                entry_price = cumm_quote / executed_qty
+
+        if entry_price == 0:
+            log.error("Cannot determine entry price for OCO order")
+            return
+
+        quantity = buy_order.get("executedQty", buy_order.get("origQty"))
+        symbol = buy_order.get("symbol", App.config["symbol"])
+
+        # Calculate TP and SL prices
+        tp_price = entry_price * (Decimal("1") + Decimal(str(tp_percent)) / Decimal("100"))
+        sl_price = entry_price * (Decimal("1") - Decimal(str(sl_percent)) / Decimal("100"))
+        # Stop limit price slightly below stop price to ensure execution
+        sl_limit_price = sl_price * Decimal("0.995")
+
+        # Round prices to 2 decimals
+        tp_price_str = round_str(tp_price, 2)
+        sl_price_str = round_str(sl_price, 2)
+        sl_limit_price_str = round_str(sl_limit_price, 2)
+
+        log.info(
+            "Placing OCO TP/SL order | entry=%.2f TP=%.2f (+%.1f%%) SL=%.2f (-%.1f%%)",
+            float(entry_price),
+            float(tp_price),
+            float(tp_percent),
+            float(sl_price),
+            float(sl_percent),
+        )
+
+        # Place OCO order
+        oco_response = App.client.create_oco_order(
+            symbol=symbol,
+            side=SIDE_SELL,
+            quantity=quantity,
+            price=tp_price_str,           # Take profit limit price
+            stopPrice=sl_price_str,        # Stop trigger price
+            stopLimitPrice=sl_limit_price_str,  # Stop limit price
+            stopLimitTimeInForce=TIME_IN_FORCE_GTC,
+        )
+
+        log.info("OCO order placed successfully: %s", oco_response.get("orderListId"))
+        App.oco_order = oco_response
+
+    except Exception as e:
+        log.error("Failed to place OCO TP/SL order: %s", e)
 
 
 def execute_order(order: dict):
