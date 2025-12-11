@@ -23,11 +23,11 @@
   "symbol": "{symbol}",
 
   "merge_file_name":   "data.csv",
-  "feature_file_name": "features.csv",
-  "matrix_file_name":  "matrix.csv",
-  "predict_file_name": "predictions.csv",
-  "signal_file_name":  "signals.csv",
-  "signal_models_file_name": "signal_models",
+  "feature_file_name": "features_staging.csv",
+  "matrix_file_name":  "matrix_staging.csv",
+  "predict_file_name": "predictions_staging.csv",
+  "signal_file_name":  "signals_staging.csv",
+  "signal_models_file_name": "signal_models_staging",
 
   "model_folder": "MODELS",  // Use models trained elsewhere
   "description": "Staging/production - predict only",
