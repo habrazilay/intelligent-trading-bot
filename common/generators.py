@@ -10,6 +10,13 @@ from common.utils import *
 from common.classifiers import *
 from common.model_store import *
 from common.gen_features import *
+
+# MLflow tracking (optional)
+try:
+    from common.mlflow_tracking import get_tracker, log_training_run
+    MLFLOW_ENABLED = True
+except ImportError:
+    MLFLOW_ENABLED = False
 from common.gen_labels_highlow import generate_labels_highlow, generate_labels_highlow2
 from common.gen_labels_topbot import generate_labels_topbot, generate_labels_topbot2
 from common.gen_signals import (
@@ -152,7 +159,12 @@ def predict_feature_set(df, fs, config, model_store: ModelStore) -> Tuple[pd.Dat
 
 
 def train_feature_set(df, fs, config) -> dict:
+    """
+    Train models for a feature set configuration.
 
+    Optionally logs metrics and models to MLflow if available and configured.
+    Set MLFLOW_TRACKING_URI environment variable to enable Azure ML tracking.
+    """
     train_features, labels, algorithms = get_features_labels_algorithms(fs, config)
 
     # Only for train mode
@@ -160,6 +172,22 @@ def train_feature_set(df, fs, config) -> dict:
     df = df.dropna(subset=labels).reset_index(drop=True)
 
     models = dict()  # Here collect the resulted trained models
+
+    # MLflow experiment setup
+    mlflow_tracker = None
+    if MLFLOW_ENABLED:
+        import os
+        strategy = config.get("strategy", "unknown")
+        symbol = config.get("symbol", "unknown")
+        freq = config.get("freq", "unknown")
+
+        # Only enable MLflow if tracking URI is set
+        if os.environ.get("MLFLOW_TRACKING_URI"):
+            try:
+                mlflow_tracker = get_tracker(experiment_name=f"itb-{strategy}")
+                print(f"MLflow tracking enabled for experiment: itb-{strategy}")
+            except Exception as e:
+                print(f"MLflow tracking initialization failed: {e}")
 
     for label in labels:
         for model_config in algorithms:
@@ -183,6 +211,9 @@ def train_feature_set(df, fs, config) -> dict:
 
             print(f"Train '{score_column_name}'. Algorithm {algo_name}. Label: {label}. Train length {len(df_X)}. Train columns {len(df_X.columns)}")
 
+            # Calculate class balance
+            positive_ratio = float(df_y.sum()) / len(df_y) if len(df_y) > 0 else 0.0
+
             if algo_type == "gb":
                 model_pair = train_gb(df_X, df_y, model_config)
                 models[score_column_name] = model_pair
@@ -200,6 +231,49 @@ def train_feature_set(df, fs, config) -> dict:
                 models[score_column_name] = model_pair
             else:
                 raise ValueError(f"Unknown algorithm type {algo_type}. Check algorithm list.")
+
+            # Log to MLflow
+            if mlflow_tracker and mlflow_tracker.is_available:
+                try:
+                    # Calculate validation metrics
+                    model = model_pair[0]
+                    y_pred = None
+
+                    if algo_type == "lgbm":
+                        y_pred = model.predict(df_X.values, num_iteration=model.best_iteration)
+                    elif algo_type in ["lc", "svc"]:
+                        y_pred = model.predict_proba(df_X.values)[:, 1]
+
+                    if y_pred is not None:
+                        scores = compute_scores(df_y, pd.Series(y_pred, index=df_y.index))
+
+                        run_name = f"{config.get('symbol', 'X')}_{config.get('freq', 'X')}_{score_column_name}"
+                        with mlflow_tracker.start_run(run_name=run_name, nested=True):
+                            mlflow_tracker.log_params({
+                                "symbol": config.get("symbol", ""),
+                                "freq": config.get("freq", ""),
+                                "strategy": config.get("strategy", ""),
+                                "label": label,
+                                "algorithm": algo_name,
+                                "algo_type": algo_type,
+                                "train_samples": len(df_X),
+                                "n_features": len(train_features),
+                                "positive_ratio": round(positive_ratio, 4),
+                            })
+                            mlflow_tracker.log_metrics(scores)
+
+                            # Log model for LGBM
+                            if algo_type == "lgbm":
+                                mlflow_tracker.log_model(
+                                    model,
+                                    artifact_path=score_column_name,
+                                    model_type="lightgbm",
+                                )
+
+                        print(f"  → MLflow logged: AUC={scores.get('auc', 0):.3f}, Precision={scores.get('precision', 0):.3f}")
+
+                except Exception as e:
+                    print(f"  → MLflow logging failed: {e}")
 
     return models
 
