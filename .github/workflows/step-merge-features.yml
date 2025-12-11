@@ -51,11 +51,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Azure CLI
-        run: |
-          apt-get update && apt-get install -y curl
-          curl -sL https://aka.ms/InstallAzureCLIDeb | bash
-
       - name: Download data from Azure Files
         run: |
           SHARE_NAME="data-itb-${FREQ}"

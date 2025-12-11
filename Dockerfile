@@ -94,11 +94,20 @@ HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
 CMD ["python", "-m", "scripts.output", "--help"]
 
 # =============================================================================
-# STAGE 3: Training - Includes model training dependencies
+# STAGE 3: Training - Includes model training dependencies + Azure CLI
 # =============================================================================
 FROM production AS training
 
 LABEL description="Intelligent Trading Bot - Training Mode"
+
+# Install Azure CLI (for GitHub Actions workflows)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg \
+    lsb-release \
+    && curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install additional training dependencies
 # Note: requirements-train.txt includes -r requirements-minimal.txt
