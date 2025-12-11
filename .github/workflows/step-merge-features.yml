@@ -8,9 +8,9 @@ on:
         required: true
         default: "configs/btcusdt_1m_dev.jsonc"
       image_tag:
-        description: "Image tag (just the tag, e.g. amd64-1764313462)"
+        description: "Image tag (e.g., v1.0.0-dev, dev)"
         required: true
-        default: "amd64-1764313462"
+        default: "dev"
   workflow_call:
     inputs:
       config_path:
@@ -43,7 +43,7 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Run merge_new + features_new in Azure Container Instance
+      - name: Run merge + features in Azure Container Instance
         run: |
           CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-merge-only
 
@@ -54,8 +54,8 @@ jobs:
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
-          echo "🔄 Creating merge-only container $CONTAINER_NAME with image $DOCKER_IMAGE..."
-          echo "   This container will run: merge_new -> features_new"
+          echo "🔄 Creating merge container $CONTAINER_NAME with image $DOCKER_IMAGE..."
+          echo "   This container will run: merge -> features"
           az container create \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
@@ -72,7 +72,7 @@ jobs:
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --no-wait \
-            --command-line "sh -c 'python -m scripts.merge_new -c $CONFIG_PATH && python -m scripts.features_new -c $CONFIG_PATH'"
+            --command-line "sh -c 'python -m scripts.merge -c $CONFIG_PATH && python -m scripts.features -c $CONFIG_PATH'"
 
           echo "⏳ Waiting for merge-only container final state..."
           for i in {1..60}; do

@@ -8,9 +8,9 @@ on:
         required: true
         default: "configs/btcusdt_1m_dev.jsonc"
       image_tag:
-        description: "Image tag (just the tag, e.g. amd64-1764313462)"
+        description: "Image tag (e.g., v1.0.0-dev, dev)"
         required: true
-        default: "amd64-1764313462"
+        default: "dev"
   workflow_call:
     inputs:
       config_path:

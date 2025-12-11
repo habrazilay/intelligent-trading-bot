@@ -8,9 +8,9 @@ on:
         required: true
         default: "configs/btcusdt_1m_dev.jsonc"
       image_tag:
-        description: "Image tag (just the tag, e.g. amd64-1764313462)"
+        description: "Image tag (e.g., v1.0.0-dev, dev)"
         required: true
-        default: "amd64-1764313462"
+        default: "dev"
   workflow_call:
     inputs:
       config_path:
@@ -25,7 +25,7 @@ on:
 env:
   ACR_LOGIN_SERVER: itbacr.azurecr.io
   ACR_REPOSITORY: itb-bot
-  DOCKER_IMAGE: itbacr.azurecr.io/itb-bot:${{ github.event.inputs.image_tag }}
+  DOCKER_IMAGE: itbacr.azurecr.io/itb-bot:${{ inputs.image_tag || github.event.inputs.image_tag }}
   AZURE_RESOURCE_GROUP: rg-itb-dev
   AZURE_CONTAINER_PREFIX: itb-bot
   AZURE_STORAGE_ACCOUNT: stitbdev
@@ -36,7 +36,7 @@ jobs:
   predict_signals_only:
     runs-on: ubuntu-latest
     env:
-      CONFIG_PATH: ${{ github.event.inputs.config_path }}
+      CONFIG_PATH: ${{ inputs.config_path || github.event.inputs.config_path }}
     steps:
       - name: Azure Login
         uses: azure/login@v1

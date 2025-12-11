@@ -8,9 +8,9 @@ on:
         required: true
         default: "configs/btcusdt_1m_dev.jsonc"
       image_tag:
-        description: "Image tag (just the tag, e.g. amd64-1764313462)"
+        description: "Image tag (e.g., v1.0.0-dev, dev)"
         required: true
-        default: "amd64-1764313462"
+        default: "dev"
   workflow_call:
     inputs:
       config_path:
@@ -43,7 +43,7 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Run labels_new in Azure Container Instance
+      - name: Run labels in Azure Container Instance
         run: |
           CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-labels-only
 
@@ -71,7 +71,7 @@ jobs:
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --no-wait \
-            --command-line "python -m scripts.labels_new -c $CONFIG_PATH"
+            --command-line "python -m scripts.labels -c $CONFIG_PATH"
 
           echo "⏳ Waiting for labels-only container final state..."
           for i in {1..60}; do
