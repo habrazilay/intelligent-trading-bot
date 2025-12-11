@@ -1,11 +1,11 @@
 name: Azure ML Pipeline - Training & Shadow Mode
 
 on:
-  push:
-    branches:
-      # - main
-      # - staging
-      - dev
+  # push:
+  #   branches:
+  #     # - main
+  #     # - staging
+  #     - dev
   pull_request:
     branches:
       # - main
