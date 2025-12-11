@@ -119,12 +119,16 @@
   ],
 
   "train_features": [
-    "close_SMA_5","close_SMA_10","close_SMA_20","close_SMA_60",
+    "close_SMA_5","close_SMA_10","close_SMA_20","close_SMA_60","close_SMA_120",
+    "close_EMA_12","close_EMA_26",
     "close_RSI_14",
     "close_LINEARREG_SLOPE_10","close_LINEARREG_SLOPE_20","close_LINEARREG_SLOPE_60",
-    "high_low_close_ATR_14",
-    "close_STDDEV_20","close_STDDEV_60"
+    "close_MOM_10",
+    "high_low_close_ATR_14","close_STDDEV_20","close_STDDEV_60",
+    "close_BBANDS_20_upper","close_BBANDS_20_middle","close_BBANDS_20_lower",
+    "close_volume_OBV_1","volume_SMA_20"
   ],
+
 
 
   "labels": ["high_05_24","low_05_24"],
@@ -136,24 +140,24 @@
       "algo":"lc",
       "params":{"is_scale":true},
       "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":500}
-    }
+    },
 
     // LightGBM – bom para tabular, não exige scaling
-    // {
-    //     "name": "lgbm",
-    //     "algo": "lgbm",
-    //     "params": {},
-    //     "train": {
-    //     "num_leaves": 31,
-    //     "learning_rate": 0.03,
-    //     "n_estimators": 300,
-    //     "max_depth": -1,
-    //     "min_data_in_leaf": 50,
-    //     "feature_fraction": 0.9,
-    //     "bagging_fraction": 0.9,
-    //     "bagging_freq": 3
-    //     }
-    // }
+    {
+        "name": "lgbm",
+        "algo": "lgbm",
+        "params": {},
+        "train": {
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "n_estimators": 300,
+        "max_depth": -1,
+        "min_data_in_leaf": 50,
+        "feature_fraction": 0.9,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 3
+        }
+    }
   ],
 
   "base_asset": "BTC",
