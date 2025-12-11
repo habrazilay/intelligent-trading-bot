@@ -1,4 +1,4 @@
-name: Full Offline Training
+name: Full Pipeline - Training & Backtest
 
 on:
   # push:
