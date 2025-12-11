@@ -249,9 +249,17 @@ def start_server(config_file):
     #
     if venue in (Venue.BINANCE, Venue.BINANCE_FUTURES):
         client_args = App.config.get("client_args", {})
-        # Prefer keys from config; fallback to environment variables loaded by dotenv
-        api_key = App.config.get("api_key") or os.getenv("BINANCE_API_KEY")
-        api_secret = App.config.get("api_secret") or os.getenv("BINANCE_API_SECRET")
+        futures_config = App.config.get("futures", {})
+        use_testnet = futures_config.get("use_testnet", True) if venue == Venue.BINANCE_FUTURES else False
+
+        # Prefer keys from config; fallback to environment variables
+        # Use DEMO keys for testnet, regular keys for production
+        if use_testnet:
+            api_key = App.config.get("api_key") or os.getenv("BINANCE_API_KEY_DEMO") or os.getenv("BINANCE_API_KEY")
+            api_secret = App.config.get("api_secret") or os.getenv("BINANCE_API_SECRET_DEMO") or os.getenv("BINANCE_API_SECRET")
+        else:
+            api_key = App.config.get("api_key") or os.getenv("BINANCE_API_KEY")
+            api_secret = App.config.get("api_secret") or os.getenv("BINANCE_API_SECRET")
 
         if not api_key or not api_secret:
             log.error(
@@ -271,9 +279,6 @@ def start_server(config_file):
 
         # Initialize Futures client if using Futures venue
         if venue == Venue.BINANCE_FUTURES:
-            futures_config = App.config.get("futures", {})
-            use_testnet = futures_config.get("use_testnet", True)
-
             try:
                 if use_testnet:
                     # Binance Futures Testnet

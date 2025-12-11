@@ -1,0 +1,10 @@
+Running pipeline with configs/base_conservative.jsonc for ADAUSDT 1h...
+Running pipeline with:
+  Config: configs/base_conservative.jsonc
+  Symbol: ADAUSDT
+  Freq:   1h
+python -m scripts.download_binance -c configs/base_conservative.jsonc --symbol ADAUSDT --freq 1h
+22:33:59 [INFO] Freq pandas  = 1h | Binance = 1h
+22:34:00 [INFO] First download of ADAUSDT since 2022-01-01 …
+Progresso ADAUSDT: [..............................]   2.9% (até 2022-02-11 15:00:00+00:00)make: *** [run] Hangup: 1
+make[1]: *** [pipeline-generic] Hangup: 1
