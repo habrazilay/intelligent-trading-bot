@@ -39,9 +39,18 @@ help:
 	@echo "    make train            - Train models"
 	@echo "    make predict          - Run predictions"
 	@echo "    make signals          - Generate signals"
-	@echo "    make pipeline         - Run full pipeline"
+	@echo "    make pipeline         - Run full pipeline (legacy)"
+	@echo "    make pipeline-generic - Run generic pipeline (BASE_CONFIG=... SYMBOL=... FREQ=...)"
 	@echo ""
-	@echo "  Dev Pipelines:"
+	@echo "  Quick Pipelines (New!):"
+	@echo "    make conservative-btc-5m  - Conservative strategy (Azure)"
+	@echo "    make conservative-eth-5m  - Conservative strategy (Azure)"
+	@echo "    make aggressive-sol-5m    - Aggressive strategy (GCP)"
+	@echo "    make aggressive-bnb-5m    - Aggressive strategy (GCP)"
+	@echo "    make quick-btc-1m         - Quick profit scalping (1m)"
+	@echo "    make quick-eth-1m         - Quick profit scalping (1m)"
+	@echo ""
+	@echo "  Dev Pipelines (Legacy):"
 	@echo "    make dev-1m           - Run dev pipeline 1m"
 	@echo "    make dev-5m           - Run dev pipeline 5m"
 	@echo ""
@@ -83,8 +92,14 @@ help:
 # Configuration
 # =============================================================================
 
-CONFIG ?= configs/btcusdt_1m_dev.jsonc
+# New generic config system (recommended)
+BASE_CONFIG ?= configs/base_conservative.jsonc
 SYMBOL ?= BTCUSDT
+FREQ ?= 5m
+
+# Legacy: specific config files (deprecated, use BASE_CONFIG + SYMBOL + FREQ instead)
+CONFIG ?= configs/btcusdt_1m_dev.jsonc
+
 ENV ?= dev
 VERSION ?= $(shell date +v%Y-%m-%d)
 
@@ -182,8 +197,48 @@ signals:
 pipeline: merge features labels train predict signals
 	@echo "Full pipeline complete!"
 
+# Generic pipeline with BASE_CONFIG (New!)
+# Usage: make pipeline-generic BASE_CONFIG=configs/base_conservative.jsonc SYMBOL=BTCUSDT FREQ=5m
+pipeline-generic:
+	@echo "Running pipeline with:"
+	@echo "  Config: $(BASE_CONFIG)"
+	@echo "  Symbol: $(SYMBOL)"
+	@echo "  Freq:   $(FREQ)"
+	python -m scripts.merge -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.features -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.labels -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.train -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.predict -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.signals -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	@echo "Generic pipeline complete!"
+
 # =============================================================================
-# Dev Pipelines
+# Quick Pipelines (New Generic System)
+# =============================================================================
+
+# Conservative (Azure baseline)
+conservative-btc-5m:
+	$(MAKE) pipeline-generic BASE_CONFIG=configs/base_conservative.jsonc SYMBOL=BTCUSDT FREQ=5m
+
+conservative-eth-5m:
+	$(MAKE) pipeline-generic BASE_CONFIG=configs/base_conservative.jsonc SYMBOL=ETHUSDT FREQ=5m
+
+# Aggressive (GCP advanced)
+aggressive-sol-5m:
+	$(MAKE) pipeline-generic BASE_CONFIG=configs/base_aggressive.jsonc SYMBOL=SOLUSDT FREQ=5m
+
+aggressive-bnb-5m:
+	$(MAKE) pipeline-generic BASE_CONFIG=configs/base_aggressive.jsonc SYMBOL=BNBUSDT FREQ=5m
+
+# Quick Profit (Scalping)
+quick-btc-1m:
+	$(MAKE) pipeline-generic BASE_CONFIG=configs/base_quick_profit.jsonc SYMBOL=BTCUSDT FREQ=1m
+
+quick-eth-1m:
+	$(MAKE) pipeline-generic BASE_CONFIG=configs/base_quick_profit.jsonc SYMBOL=ETHUSDT FREQ=1m
+
+# =============================================================================
+# Dev Pipelines (Legacy)
 # =============================================================================
 
 dev-1m:

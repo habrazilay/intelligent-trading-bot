@@ -1,0 +1,242 @@
+{
+  // ============================================================================
+  // BASE CONSERVATIVE CONFIG
+  // ============================================================================
+  // Strategy: Conservative baseline for Azure deployment
+  // Models: Logistic Regression + LightGBM
+  // Risk: Low (higher thresholds, longer horizons)
+  // Use: python -m scripts.train --config configs/base_conservative.jsonc --symbol BTCUSDT --freq 5m
+  // ============================================================================
+
+  // === EXECUTION ==============================================================
+
+  "train": true,  // Set to false for staging/production (predict-only mode)
+  "venue": "binance",
+
+  // Credentials from .env (BINANCE_API_KEY / BINANCE_API_SECRET)
+  "api_key": "",
+  "api_secret": "",
+
+  // Telegram notifications (optional, reads from .env if empty)
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+
+  // === PATHS (NO HARDCODED SYMBOL/FREQ) ======================================
+
+  // These will be set dynamically by scripts based on --symbol and --freq args
+  "data_folder": "./DATA_ITB_{freq}",  // Will become ./DATA_ITB_5m
+  "symbol": "{symbol}",                // Will become BTCUSDT
+
+  // Generic file names (NO symbol/freq hardcoded)
+  "merge_file_name":   "data.csv",
+  "feature_file_name": "features.csv",
+  "matrix_file_name":  "matrix.csv",
+  "predict_file_name": "predictions.csv",
+  "signal_file_name":  "signals.csv",
+  "signal_models_file_name": "signal_models",
+
+  "model_folder": "MODELS_CONSERVATIVE",
+  "description": "Conservative strategy - Azure baseline",
+  "freq": "{freq}",           // Will become 5m, 1m, 1h
+  "pandas_freq": "{pandas_freq}",  // Will become 5min, 1min, 1h
+  "time_column": "timestamp",
+
+  // === WINDOWS AND SIZES (CALCULATED DYNAMICALLY) ============================
+
+  // These will be calculated based on freq:
+  // 1m: label_horizon=60 (1h), train_length=525600 (1 year)
+  // 5m: label_horizon=24 (2h), train_length=105120 (1 year)
+  // 1h: label_horizon=4 (4h), train_length=8760 (1 year)
+
+  "label_horizon":   24,     // CONSERVATIVE: Longer horizon = more confirmation
+  "features_horizon": 24,
+  "train_length":    105120,  // 1 year of data
+  "predict_length":  288,     // Last 288 candles (1 day for 5m)
+  "append_overlap_records": 5,
+
+  // === DOWNLOAD AND MERGE ====================================================
+
+  "data_sources": [
+    { "folder": "{symbol}", "file": "klines", "column_prefix": "" }
+  ],
+
+  "download_start": "2022-01-01",  // Avoid downloading everything since 2017
+  "download_end":   null,          // null = now
+
+  "merge_interpolate": false,
+
+  // === FEATURES ==============================================================
+  // CONSERVATIVE: Proven indicators, avoid overfitting
+
+  "feature_sets": [
+    // Moving Averages (trend)
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["SMA"],"windows":[5,10,20,60,120]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["EMA"],"windows":[12,26]}},
+
+    // Momentum
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["RSI"],"windows":[14]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["LINEARREG_SLOPE"],"windows":[10,20,60]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["MOM"],"windows":[10]}},
+
+    // Volatility
+    { "generator":"talib",
+      "config":{"columns":["high","low","close"],"functions":["ATR"],"windows":[14]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["STDDEV"],"windows":[20,60]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["BBANDS"],"windows":[20]}},
+
+    // Volume (IMPORTANT - currently missing!)
+    { "generator":"talib",
+      "config":{"columns":["close","volume"],"functions":["OBV"],"windows":[1]}},
+    { "generator":"talib",
+      "config":{"columns":["volume"],"functions":["SMA"],"windows":[20]}}
+  ],
+
+  // === LABELS ================================================================
+  // CONSERVATIVE: Higher thresholds (0.6% = safer trades, lower frequency)
+
+  "label_sets": [
+    {
+      "generator":"highlow2",
+      "config":{
+        "columns": ["close","high","low"],
+        "function": "high",
+        "thresholds": [0.6],       // CONSERVATIVE: 0.6% gain required
+        "tolerance": 0.1,
+        "horizon": 24,
+        "names": ["high_06_24"]
+      }
+    },
+    {
+      "generator":"highlow2",
+      "config":{
+        "columns": ["close","high","low"],
+        "function": "low",
+        "thresholds": [0.6],       // CONSERVATIVE: 0.6% drop required
+        "tolerance": 0.1,
+        "horizon": 24,
+        "names": ["low_06_24"]
+      }
+    }
+  ],
+
+  // === TRAINING ==============================================================
+  // CONSERVATIVE: Both LogReg (baseline) + LightGBM (proven)
+
+  "train_feature_sets": [
+    {
+      "generator": "train_features",
+      "config": {}
+    }
+  ],
+
+  "train_features": [
+    "close_SMA_5","close_SMA_10","close_SMA_20","close_SMA_60","close_SMA_120",
+    "close_EMA_12","close_EMA_26",
+    "close_RSI_14",
+    "close_LINEARREG_SLOPE_10","close_LINEARREG_SLOPE_20","close_LINEARREG_SLOPE_60",
+    "close_MOM_10",
+    "high_low_close_ATR_14","close_STDDEV_20","close_STDDEV_60",
+    "close_BBANDS_20_upper","close_BBANDS_20_middle","close_BBANDS_20_lower",
+    "close_volume_OBV_1","volume_SMA_20"
+  ],
+
+  "labels": ["high_06_24","low_06_24"],
+
+  "algorithms": [
+    // Logistic Regression (baseline, fast, interpretable)
+    {
+      "name":"lc",
+      "algo":"lc",
+      "params":{"is_scale":true},
+      "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":1000}
+    },
+
+    // LightGBM (proven, good for tabular)
+    {
+      "name":"lgbm",
+      "algo":"lgbm",
+      "params":{},
+      "train":{"num_leaves":31,"learning_rate":0.05,"n_estimators":300,"max_depth":-1}
+    }
+  ],
+
+  // === SIGNALS ===============================================================
+  // CONSERVATIVE: Higher thresholds = fewer but safer trades
+
+  "signal_sets": [
+    {
+      "generator":"combine",
+      "config":{
+        "columns":["high_06_24_lgbm","low_06_24_lgbm"],
+        "names":"trade_score",
+        "combine":"difference"
+      }
+    },
+    {
+      "generator":"threshold_rule",
+      "config":{
+        "columns":"trade_score",
+        "names":["buy_signal","sell_signal"],
+        "parameters":{
+          "buy_signal_threshold": 0.004,   // CONSERVATIVE: higher threshold
+          "sell_signal_threshold": -0.004
+        }
+      }
+    }
+  ],
+
+  // === OUTPUTS ===============================================================
+
+  "output_sets": [
+    {
+      "generator":"score_notification_model",
+      "config":{
+        "score_notification":true,
+        "score_column_names":["trade_score"]
+      }
+    },
+    {
+      "generator":"trader_simulation",
+      "config":{
+        "buy_signal_column":"buy_signal",
+        "sell_signal_column":"sell_signal"
+      }
+    }
+  ],
+
+  // === THRESHOLD OPTIMIZATION ================================================
+  // CRITICAL FOR SHADOW MODE: Test different thresholds to maximize Sharpe/Win Rate
+
+  "simulate_model": {
+    "data_start":0,
+    "data_end":null,
+    "direction":"long",
+    "topn_to_store":10,
+    "signal_generator":"threshold_rule",
+    "buy_sell_equal":false,
+    "grid":{
+      // CONSERVATIVE: Test conservative thresholds
+      "buy_signal_threshold":[0.003, 0.004, 0.005, 0.006],
+      "sell_signal_threshold":[-0.003, -0.004, -0.005, -0.006]
+    }
+  },
+
+  // === ROLLING PREDICT =======================================================
+
+  "rolling_predict": {
+    "data_start": "2024-11-17 00:00:00",
+    "data_end":   null,
+    "prediction_start": null,
+    "prediction_size": 10080,
+    "prediction_steps": 4,
+    "use_multiprocessing": true,
+    "max_workers": 6
+  }
+}
