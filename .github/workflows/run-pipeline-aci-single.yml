@@ -39,6 +39,11 @@ on:
         description: 'Azure region (leave empty for resource group default)'
         required: false
         default: ''
+      skip_file_mount:
+        description: 'Skip Azure File mount (for debugging ACI issues)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   run-pipeline:
@@ -116,7 +121,6 @@ jobs:
             LOCATION="${{ github.event.inputs.location }}"
             echo "⚠️  Using custom location: $LOCATION"
             echo "    Storage account is in: $STORAGE_LOCATION"
-            echo "    If different, file share mount will fail!"
           else
             LOCATION="$STORAGE_LOCATION"
           fi
@@ -127,11 +131,9 @@ jobs:
           echo "   Resource Group: ${{ vars.AZURE_RESOURCE_GROUP }}"
           echo "   Location: $LOCATION"
           echo "   Storage: ${{ vars.AZURE_STORAGE_ACCOUNT }} ($STORAGE_LOCATION)"
-
           echo ""
 
-          # Create container (blocking - waits for provisioning)
-          # Using --output table for cleaner logs
+          # Create container with Azure File mount
           az container create \
             --location "$LOCATION" \
             --name "$CONTAINER_NAME" \
@@ -152,82 +154,58 @@ jobs:
             --azure-file-volume-account-name "${{ vars.AZURE_STORAGE_ACCOUNT }}" \
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --azure-file-volume-mount-path "$DATA_MOUNT" \
-            --output table \
-            --command-line "bash -lc '
-              set -e
+            --command-line "sleep 60"
 
-              echo \"========================================\"
-              echo \"🚀 ITB Full Pipeline\"
-              echo \"========================================\"
-              echo \"Config: \$CONFIG_PATH\"
-              echo \"Symbol: \$SYMBOL\"
-              echo \"Freq: \$FREQ\"
-              echo \"Data: ${DATA_MOUNT}/\$SYMBOL\"
-              echo \"========================================\"
-
-              cd /app
-
-              echo \"\"
-              echo \"📊 Step 1/6: Merge...\"
-              python -m scripts.merge -c \"\$CONFIG_PATH\" --symbol \"\$SYMBOL\" --freq \"\$FREQ\"
-
-              echo \"\"
-              echo \"🧮 Step 2/6: Features...\"
-              python -m scripts.features -c \"\$CONFIG_PATH\" --symbol \"\$SYMBOL\" --freq \"\$FREQ\"
-
-              echo \"\"
-              echo \"🏷️ Step 3/6: Labels...\"
-              python -m scripts.labels -c \"\$CONFIG_PATH\" --symbol \"\$SYMBOL\" --freq \"\$FREQ\"
-
-              echo \"\"
-              echo \"🎓 Step 4/6: Train...\"
-              python -m scripts.train -c \"\$CONFIG_PATH\" --symbol \"\$SYMBOL\" --freq \"\$FREQ\"
-
-              echo \"\"
-              echo \"🔮 Step 5/6: Predict...\"
-              python -m scripts.predict -c \"\$CONFIG_PATH\" --symbol \"\$SYMBOL\" --freq \"\$FREQ\"
-
-              echo \"\"
-              echo \"🚦 Step 6/6: Signals...\"
-              python -m scripts.signals -c \"\$CONFIG_PATH\" --symbol \"\$SYMBOL\" --freq \"\$FREQ\"
-
-              echo \"\"
-              echo \"========================================\"
-              echo \"✅ Pipeline complete!\"
-              echo \"========================================\"
-            '"
+          echo ""
+          echo "✅ Container created, checking status..."
+          az container show \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --query "{state:provisioningState,containerState:containers[0].instanceView.currentState.state}" \
+            -o table
 
       - name: Wait for container to complete
-        timeout-minutes: 60
+        timeout-minutes: 10
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
 
-          echo "⏳ Waiting for pipeline to complete..."
+          echo "⏳ Waiting for container to complete..."
+          COUNTER=0
 
           while true; do
-            STATE=$(az container show \
+            # Get both provisioning state and container state
+            RESULT=$(az container show \
               --name "$CONTAINER_NAME" \
               --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-              --query "containers[0].instanceView.currentState.state" -o tsv 2>/dev/null || echo "Waiting")
+              --query "{prov:provisioningState, state:containers[0].instanceView.currentState.state, exit:containers[0].instanceView.currentState.exitCode}" \
+              -o json 2>/dev/null || echo '{"prov":"Unknown","state":"Unknown","exit":null}')
 
-            echo "Container state: $STATE"
+            PROV_STATE=$(echo "$RESULT" | jq -r '.prov')
+            CONTAINER_STATE=$(echo "$RESULT" | jq -r '.state')
+            EXIT_CODE=$(echo "$RESULT" | jq -r '.exit')
 
-            if [ "$STATE" = "Terminated" ]; then
-              EXIT_CODE=$(az container show \
-                --name "$CONTAINER_NAME" \
-                --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-                --query "containers[0].instanceView.currentState.exitCode" -o tsv)
+            echo "[$COUNTER] Provisioning: $PROV_STATE | Container: $CONTAINER_STATE | Exit: $EXIT_CODE"
 
+            # Check for terminal states
+            if [ "$CONTAINER_STATE" = "Terminated" ]; then
+              echo ""
               echo "Container finished with exit code: $EXIT_CODE"
-
-              if [ "$EXIT_CODE" != "0" ]; then
-                echo "❌ Pipeline failed with exit code: $EXIT_CODE"
+              if [ "$EXIT_CODE" != "0" ] && [ "$EXIT_CODE" != "null" ]; then
+                echo "❌ Container failed!"
                 exit 1
               fi
+              echo "✅ Container completed successfully!"
               break
             fi
 
-            sleep 30
+            # Check for provisioning failures
+            if [ "$PROV_STATE" = "Failed" ]; then
+              echo "❌ Provisioning failed!"
+              exit 1
+            fi
+
+            COUNTER=$((COUNTER + 1))
+            sleep 15
           done
 
       - name: Get container info and logs
