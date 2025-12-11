@@ -24,11 +24,11 @@
   "symbol": "{symbol}",
 
   "merge_file_name":   "data.csv",
-  "feature_file_name": "features.csv",
-  "matrix_file_name":  "matrix.csv",
-  "predict_file_name": "predictions.csv",
-  "signal_file_name":  "signals.csv",
-  "signal_models_file_name": "signal_models",
+  "feature_file_name": "features_quick.csv",
+  "matrix_file_name":  "matrix_quick.csv",
+  "predict_file_name": "predictions_quick.csv",
+  "signal_file_name":  "signals_quick.csv",
+  "signal_models_file_name": "signal_models_quick",
 
   "model_folder": "MODELS_QUICK_PROFIT",
   "description": "Quick profit scalping strategy",

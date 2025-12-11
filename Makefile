@@ -55,7 +55,8 @@ help:
 	@echo "    make dev-5m           - Run dev pipeline 5m"
 	@echo ""
 	@echo "  Analysis:"
-	@echo "    make analyze-1m       - Run analyze_btcusdt_1m.py"
+	@echo "    make analyze SYMBOL=BTCUSDT FREQ=5m  - Analyze data and get recommendations"
+	@echo "    make analyze-1m                      - Legacy: analyze_btcusdt_1m.py"
 	@echo ""
 	@echo "  Upload to Azure:"
 	@echo "    make upload-1m        - Upload BTCUSDT 1m to Azure Files"
@@ -269,13 +270,15 @@ run:
 		echo ""; \
 		echo "Available Symbols: BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT"; \
 		echo "Available Frequencies: 1m, 5m, 15m, 1h"; \
-		echo "Available Strategies: conservative (default), aggressive, quick"; \
+		echo "Available Strategies: conservative (default), aggressive, staging, quick"; \
 		echo ""; \
 		exit 1; \
 	fi
 	@# Determine config based on STRATEGY
 	@if [ "$(STRATEGY)" = "aggressive" ]; then \
 		CONFIG=configs/base_aggressive.jsonc; \
+	elif [ "$(STRATEGY)" = "staging" ]; then \
+		CONFIG=configs/base_staging.jsonc; \
 	elif [ "$(STRATEGY)" = "quick" ]; then \
 		CONFIG=configs/base_quick_profit.jsonc; \
 	else \
@@ -341,6 +344,28 @@ signals-1m-lgbm:
 # Analysis
 # =============================================================================
 
+# Generic analyze (New!)
+analyze:
+	@if [ -z "$(SYMBOL)" ] || [ -z "$(FREQ)" ]; then \
+		echo ""; \
+		echo "ERROR: SYMBOL and FREQ are required!"; \
+		echo ""; \
+		echo "Usage: make analyze SYMBOL=<symbol> FREQ=<freq> [DAYS=<days>]"; \
+		echo ""; \
+		echo "Examples:"; \
+		echo "  make analyze SYMBOL=BTCUSDT FREQ=5m"; \
+		echo "  make analyze SYMBOL=ETHUSDT FREQ=1m DAYS=30"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@DAYS=$${DAYS:-90}; \
+	echo ">> Analyzing $(SYMBOL) $(FREQ) data (last $$DAYS days)..."; \
+	python -m scripts.analyze_data \
+	  --symbol $(SYMBOL) \
+	  --freq $(FREQ) \
+	  --days $$DAYS
+
+# Legacy analyze
 analyze-1m:
 	@echo ">> analyze_btcusdt_1m.py (local)"
 	python my_tests/analyze_btcusdt_1m.py \

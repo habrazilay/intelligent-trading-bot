@@ -29,11 +29,11 @@
 
   // Generic file names (NO symbol/freq hardcoded)
   "merge_file_name":   "data.csv",
-  "feature_file_name": "features.csv",
-  "matrix_file_name":  "matrix.csv",
-  "predict_file_name": "predictions.csv",
-  "signal_file_name":  "signals.csv",
-  "signal_models_file_name": "signal_models",
+  "feature_file_name": "features_conservative.csv",
+  "matrix_file_name":  "matrix_conservative.csv",
+  "predict_file_name": "predictions_conservative.csv",
+  "signal_file_name":  "signals_conservative.csv",
+  "signal_models_file_name": "signal_models_conservative",
 
   "model_folder": "MODELS_CONSERVATIVE",
   "description": "Conservative strategy - Azure baseline",
