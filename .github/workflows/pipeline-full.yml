@@ -41,6 +41,10 @@ on:
           - train-only
           - predict-only
         default: 'full'
+      image_tag:
+        description: 'ACR image tag (e.g., dev-training, v1.0.1-dev-training)'
+        required: false
+        default: 'dev-training'
 
 jobs:
   setup:
@@ -69,6 +73,7 @@ jobs:
       config_path: ${{ needs.setup.outputs.config_path }}
       symbol: ${{ github.event.inputs.symbol || 'BTCUSDT' }}
       freq: ${{ github.event.inputs.freq || '5m' }}
+      image_tag: ${{ github.event.inputs.image_tag || 'dev-training' }}
 
   labels:
     name: Labels
@@ -80,6 +85,7 @@ jobs:
       config_path: ${{ needs.setup.outputs.config_path }}
       symbol: ${{ github.event.inputs.symbol || 'BTCUSDT' }}
       freq: ${{ github.event.inputs.freq || '5m' }}
+      image_tag: ${{ github.event.inputs.image_tag || 'dev-training' }}
 
   train:
     name: Train
@@ -91,6 +97,7 @@ jobs:
       config_path: ${{ needs.setup.outputs.config_path }}
       symbol: ${{ github.event.inputs.symbol || 'BTCUSDT' }}
       freq: ${{ github.event.inputs.freq || '5m' }}
+      image_tag: ${{ github.event.inputs.image_tag || 'dev-training' }}
 
   predict_signals:
     name: Predict + Signals
@@ -102,3 +109,4 @@ jobs:
       config_path: ${{ needs.setup.outputs.config_path }}
       symbol: ${{ github.event.inputs.symbol || 'BTCUSDT' }}
       freq: ${{ github.event.inputs.freq || '5m' }}
+      image_tag: ${{ github.event.inputs.image_tag || 'dev-training' }}
