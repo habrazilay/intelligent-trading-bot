@@ -1,0 +1,58 @@
+# -----------------------------------------------------------------------------
+# Common Configuration - Shared across all clouds and environments
+# Single source of truth for project settings
+# -----------------------------------------------------------------------------
+
+project:
+  name: "itb"
+  description: "Intelligent Trading Bot"
+
+# Trading pairs to monitor
+trading:
+  pairs:
+    - BTCUSDT
+    - ETHUSDT
+    - BNBUSDT
+    - SOLUSDT
+    - XRPUSDT
+
+  # Download settings
+  download:
+    start_date: "2022-01-01"
+    frequency: "1m"           # Binance frequency
+    pandas_freq: "1min"       # Pandas frequency
+
+# Azure settings (same for all envs, only resource names change)
+azure:
+  location: "eastus"
+  storage:
+    quota_gb: 50
+    replication: "LRS"
+  aci:
+    cpu: 1
+    memory_gb: 2
+
+# GCP settings
+gcp:
+  region: "us-central1"
+  zone: "us-central1-a"
+
+# Environment-specific overrides
+environments:
+  dev:
+    azure:
+      resource_suffix: "dev"
+    gcp:
+      resource_suffix: "dev"
+
+  staging:
+    azure:
+      resource_suffix: "stg"
+    gcp:
+      resource_suffix: "stg"
+
+  prod:
+    azure:
+      resource_suffix: "prod"
+    gcp:
+      resource_suffix: "prod"

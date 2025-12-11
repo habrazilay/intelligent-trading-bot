@@ -122,7 +122,19 @@ def merge_data_sources(
     show_default=True,
     help="Logging level (DEBUG, INFO, WARNING, ERROR)",
 )
-def main(config_file: str, dry_run: bool, log_level: str) -> None:
+@click.option(
+    "--symbol",
+    type=str,
+    default=None,
+    help="Symbol override (e.g., BTCUSDT, ETHUSDT)",
+)
+@click.option(
+    "--freq",
+    type=str,
+    default=None,
+    help="Frequency override (e.g., 1m, 5m, 1h)",
+)
+def main(config_file: str, dry_run: bool, log_level: str, symbol: str, freq: str) -> None:
     # Logging básico
     level = getattr(logging, log_level.upper(), logging.INFO)
     logging.basicConfig(
@@ -130,7 +142,7 @@ def main(config_file: str, dry_run: bool, log_level: str) -> None:
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
 
-    load_config(config_file)
+    load_config(config_file, symbol=symbol, freq=freq)
     config = App.config
 
     time_column = config.get("time_column", "time")

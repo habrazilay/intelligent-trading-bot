@@ -135,13 +135,6 @@
       "params":{"is_scale":true},
       "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":1000}
     },
-    // Random Forest
-    // {
-    //   "name":"rf",
-    //   "algo":"rf",
-    //   "params":{},
-    //   "train":{"n_estimators":100,"max_depth":10,"min_samples_leaf":10,"max_features":"sqrt"}
-    // },
 
     //LightGBM – bom para tabular, não exige scaling
     {

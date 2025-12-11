@@ -32,7 +32,19 @@ log = logging.getLogger(__name__)
     show_default=True,
     help="Logging level (DEBUG, INFO, WARNING, ERROR)",
 )
-def main(config_file, dry_run, log_level):
+@click.option(
+    "--symbol",
+    type=str,
+    default=None,
+    help="Symbol override (e.g., BTCUSDT, ETHUSDT)",
+)
+@click.option(
+    "--freq",
+    type=str,
+    default=None,
+    help="Frequency override (e.g., 1m, 5m, 1h)",
+)
+def main(config_file, dry_run, log_level, symbol, freq):
     # Logging básico
     level = getattr(logging, log_level.upper(), logging.INFO)
     logging.basicConfig(
@@ -40,12 +52,12 @@ def main(config_file, dry_run, log_level):
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
 
-    load_config(config_file)
+    load_config(config_file, symbol=symbol, freq=freq)
     config = App.config
 
-    # ModelStore (não é estritamente necessário para labels, mas mantemos padrão)
+    # Initialize model store but don't load models (labels don't need them)
     App.model_store = ModelStore(config)
-    App.model_store.load_models()
+    # App.model_store.load_models()  # Not needed for label generation
 
     time_column = config.get("time_column", "time")
     if "time_column" not in config:

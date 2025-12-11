@@ -1,6 +1,7 @@
 import os
 import sys
 import importlib
+import inspect
 from datetime import datetime, timezone, timedelta
 from typing import Union
 import json
@@ -215,7 +216,9 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
 
         # Escolhe o mapeamento de colunas adequado para esta função TALIB
         fn_columns = columns
-        # Caso especial: ATR precisa explicitamente de high/low/close
+
+        # Special cases: Some TA-Lib functions require specific named inputs
+        # ATR: high, low, close
         if (
             isinstance(original_column_names, list)
             and len(original_column_names) == 3
@@ -225,6 +228,30 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
                 "high": df[original_column_names[0]].interpolate(),
                 "low": df[original_column_names[1]].interpolate(),
                 "close": df[original_column_names[2]].interpolate(),
+            }
+
+        # OBV: real (close), volume
+        elif (
+            isinstance(original_column_names, list)
+            and len(original_column_names) == 2
+            and func_name.upper() == "OBV"
+        ):
+            fn_columns = {
+                "real": df[original_column_names[0]].interpolate(),
+                "volume": df[original_column_names[1]].interpolate(),
+            }
+
+        # MFI: high, low, close, volume
+        elif (
+            isinstance(original_column_names, list)
+            and len(original_column_names) == 4
+            and func_name.upper() == "MFI"
+        ):
+            fn_columns = {
+                "high": df[original_column_names[0]].interpolate(),
+                "low": df[original_column_names[1]].interpolate(),
+                "close": df[original_column_names[2]].interpolate(),
+                "volume": df[original_column_names[3]].interpolate(),
             }
 
         # Determine if the function support stream mode
@@ -251,12 +278,65 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
                     raise ValueError(f"Cannot resolve talib function name '{func_name}'. Check the (existence of) name of the function")
 
                 args = fn_columns.copy()
-                if w:
+
+                # Some TA-Lib functions don't accept 'timeperiod' parameter (e.g., OBV, AD, ADOSC)
+                # Check if the function accepts timeperiod before adding it
+                fn_sig = inspect.signature(fn)
+                accepts_timeperiod = 'timeperiod' in fn_sig.parameters
+
+                if w and accepts_timeperiod:
                     args['timeperiod'] = w
+
                 if w == 1 and len(fn_columns) == 1:  # For window 1 use the original values (because talib fails to do this)
-                    out = next(iter(fn_columns.values()))
+                    out = next(iter(fn_columns.values())).copy()
                 else:
                     out = fn(**args)
+                # Handle functions that return multiple outputs (BBANDS, MACD, etc.)
+                if isinstance(out, tuple):
+                    # Function returned multiple arrays (e.g., BBANDS returns 3: upper, middle, lower)
+                    # We need to convert each to a pandas Series and add them separately
+                    suffixes = {
+                        'BBANDS': ['upper', 'middle', 'lower'],
+                        'MACD': ['macd', 'macdsignal', 'macdhist'],
+                        'STOCH': ['slowk', 'slowd'],
+                        'STOCHF': ['fastk', 'fastd'],
+                        'STOCHRSI': ['fastk', 'fastd'],
+                    }
+
+                    # Get suffixes for this function, or use generic names
+                    func_suffixes = suffixes.get(func_name.upper(), [f'output{i+1}' for i in range(len(out))])
+
+                    # Process each output separately
+                    for idx, single_out in enumerate(out):
+                        # Convert numpy array to pandas Series
+                        if not isinstance(single_out, pd.Series):
+                            single_out = pd.Series(single_out, index=df.index)
+
+                        # Create name for this specific output
+                        suffix = func_suffixes[idx] if idx < len(func_suffixes) else f'output{idx+1}'
+                        if not w:
+                            if not names:
+                                out_name_multi = f"{col_out_names}_{func_name}_{suffix}"
+                            elif isinstance(names, str):
+                                out_name_multi = f"{names}_{suffix}"
+                            elif isinstance(names, list):
+                                out_name_multi = f"{names[j]}_{suffix}"
+                        else:
+                            out_name_base = f"{col_out_names}_{func_name}_"
+                            win_name = str(w)
+                            if not names:
+                                out_name_multi = f"{out_name_base}{win_name}_{suffix}"
+                            elif isinstance(names, str):
+                                out_name_multi = f"{out_name_base}{names}_{win_name}_{suffix}"
+                            elif isinstance(names, list):
+                                out_name_multi = f"{names[j]}_{suffix}"
+
+                        single_out.name = out_name_multi
+                        fn_outs.append(single_out)
+                        fn_out_names.append(out_name_multi)
+
+                    # Skip the normal single-output processing below
+                    continue
 
             #
             # Online: In a loop, compute the specified number of single values for the manually prepared windows
@@ -267,13 +347,17 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
                 except AttributeError as e:
                     raise ValueError(f"Cannot resolve talib.stream function name '{func_name}'. Check the (existence of) name of the function")
 
+                # Check if the function accepts timeperiod before adding it
+                fn_sig = inspect.signature(fn)
+                accepts_timeperiod = 'timeperiod' in fn_sig.parameters
+
                 # Here fn (function) is a different function from a different module (this function is applied to a single window rather than to rolling windows)
                 out_values = []
                 for r in range(last_rows):
                     # Remove r elements from the end
                     # Note that we do not remove elements from the start so the length is limited from one side only
                     args = {k: v.iloc[:len(v)-r] for k, v in fn_columns.items()}
-                    if w:
+                    if w and accepts_timeperiod:
                         args['timeperiod'] = w
 
                     if w == 1 and len(fn_columns) == 1:  # For window 1 use the original values (because talib fails to do this)

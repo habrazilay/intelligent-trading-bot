@@ -94,13 +94,19 @@ def problems_exist():
     return False
 
 
-def load_config(config_file: str) -> None:
+def load_config(config_file: str, symbol: str = None, freq: str = None) -> None:
     """Load a JSON/JSONC config file into App.config and overlay env secrets.
 
     - Reads the given JSON/JSONC file (supports // comments)
     - Replaces App.config entirely with the file content
+    - If symbol/freq are provided, substitutes placeholders ({symbol}, {freq})
     - If BINANCE_API_KEY / BINANCE_API_SECRET are set in the environment and
       the config does not define them, they are injected.
+
+    Args:
+        config_file: Path to config file (relative to project root)
+        symbol: Optional symbol override (e.g., "BTCUSDT")
+        freq: Optional frequency override (e.g., "5m")
     """
     if not config_file:
         # No file provided: leave as-is (caller may fill App.config manually)
@@ -110,18 +116,26 @@ def load_config(config_file: str) -> None:
     config_file_path = PACKAGE_ROOT / config_file
     if not config_file_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_file_path}")
+    # Use config_helper if symbol/freq provided
+    if symbol or freq:
+        from scripts.config_helper import load_config_with_args
+        conf_json = load_config_with_args(
+            config_path=str(config_file_path),
+            symbol=symbol,
+            freq=freq
+        )
+    else:
+        # Legacy path: load config as-is
+        with open(config_file_path, encoding="utf-8") as f:
+            raw = f.read()
 
-    with open(config_file_path, encoding="utf-8") as f:
-        raw = f.read()
+        # Strip // comments to support JSONC-style configs
+        conf_str = re.sub(r"//.*$", "", raw, flags=re.M)
 
-    # Strip // comments to support JSONC-style configs
-    conf_str = re.sub(r"//.*$", "", raw, flags=re.M)
-
-    try:
-        conf_json = json.loads(conf_str)
-    except Exception as e:
-        raise RuntimeError(f"Erro ao parsear JSON de '{config_file_path}': {e}")
-
+        try:
+            conf_json = json.loads(conf_str)
+        except Exception as e:
+            raise RuntimeError(f"Erro ao parsear JSON de '{config_file_path}': {e}")
     # Replace the in-memory config entirely with the JSON config
     App.config = conf_json
 

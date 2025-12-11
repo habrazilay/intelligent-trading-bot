@@ -1,4 +1,4 @@
-name: Run predict + signals only on Azure ACI (ACR + FileShare)
+name: Step - Labels
 
 on:
   workflow_dispatch:
@@ -25,7 +25,7 @@ on:
 env:
   ACR_LOGIN_SERVER: itbacr.azurecr.io
   ACR_REPOSITORY: itb-bot
-  DOCKER_IMAGE: itbacr.azurecr.io/itb-bot:${{ github.event.inputs.image_tag }}
+  DOCKER_IMAGE: itbacr.azurecr.io/itb-bot:${{ inputs.image_tag || github.event.inputs.image_tag }}
   AZURE_RESOURCE_GROUP: rg-itb-dev
   AZURE_CONTAINER_PREFIX: itb-bot
   AZURE_STORAGE_ACCOUNT: stitbdev
@@ -33,28 +33,28 @@ env:
   DATA_MOUNT_PATH: /app/DATA_ITB_1m
 
 jobs:
-  predict_signals_only:
+  labels_only:
     runs-on: ubuntu-latest
     env:
-      CONFIG_PATH: ${{ github.event.inputs.config_path }}
+      CONFIG_PATH: ${{ inputs.config_path || github.event.inputs.config_path }}
     steps:
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Run predict + signals in Azure Container Instance
+      - name: Run labels_new in Azure Container Instance
         run: |
-          CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-predict-signals-only
+          CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-labels-only
 
           echo "CONFIG_PATH=$CONFIG_PATH"
-          echo "🧹 Deleting previous predict-signals-only container (if exists)..."
+          echo "🧹 Deleting previous labels-only container (if exists)..."
           az container delete \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
-          echo "🔄 Creating predict-signals-only container $CONTAINER_NAME with image $DOCKER_IMAGE..."
+          echo "🔄 Creating labels-only container $CONTAINER_NAME with image $DOCKER_IMAGE..."
           az container create \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
@@ -71,9 +71,9 @@ jobs:
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --no-wait \
-            --command-line "sh -c 'python -m scripts.predict -c $CONFIG_PATH && python -m scripts.signals -c $CONFIG_PATH'"
+            --command-line "python -m scripts.labels_new -c $CONFIG_PATH"
 
-          echo "⏳ Waiting for predict-signals-only container final state..."
+          echo "⏳ Waiting for labels-only container final state..."
           for i in {1..60}; do
             STATE=$(az container show \
               --name "$CONTAINER_NAME" \
@@ -86,7 +86,7 @@ jobs:
             sleep 5
           done
 
-          echo "📜 predict-signals-only container logs:"
+          echo "📜 labels-only container logs:"
           az container logs \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"

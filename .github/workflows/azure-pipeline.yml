@@ -1,0 +1,470 @@
+name: Azure ML Pipeline - Training & Shadow Mode
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+      - dev
+  pull_request:
+    branches:
+      - main
+      - staging
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: 'Trading symbol (e.g., BTCUSDT, ETHUSDT)'
+        required: true
+        default: 'BTCUSDT'
+      freq:
+        description: 'Timeframe (1m, 5m, 1h)'
+        required: true
+        type: choice
+        options:
+          - 1m
+          - 5m
+          - 1h
+        default: '5m'
+      strategy:
+        description: 'Strategy config'
+        required: true
+        type: choice
+        options:
+          - conservative
+          - aggressive
+          - quick
+        default: 'conservative'
+      pipeline_mode:
+        description: 'Pipeline mode'
+        required: true
+        type: choice
+        options:
+          - full
+          - train-only
+          - predict-only
+        default: 'full'
+
+env:
+  PYTHON_VERSION: '3.11'
+  AZURE_REGION: 'eastus'
+
+jobs:
+  # ============================================================================
+  # JOB 1: Validação
+  # ============================================================================
+  validate:
+    name: Validate Code & Dependencies
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-train.txt
+
+      - name: Validate Python syntax
+        run: |
+          python -m py_compile scripts/*.py
+          python -m py_compile service/*.py
+          python -m py_compile common/*.py
+
+      - name: Verify config files
+        run: |
+          python -c "
+          import json
+          from pathlib import Path
+
+          configs = list(Path('configs').glob('base_*.jsonc'))
+          print(f'Found {len(configs)} base config files')
+
+          for config in configs:
+              print(f'✓ {config.name}')
+          "
+
+  # ============================================================================
+  # JOB 2: Build Docker Image
+  # ============================================================================
+  build-docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image (minimal)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: production
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/intelligent-trading-bot:minimal
+            ${{ secrets.DOCKER_USERNAME }}/intelligent-trading-bot:${{ github.sha }}-minimal
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/intelligent-trading-bot:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/intelligent-trading-bot:buildcache,mode=max
+
+      - name: Build and push Docker image (training)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: training
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/intelligent-trading-bot:training
+            ${{ secrets.DOCKER_USERNAME }}/intelligent-trading-bot:${{ github.sha }}-training
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/intelligent-trading-bot:buildcache
+
+  # ============================================================================
+  # JOB 3: Download & Prepare Data
+  # ============================================================================
+  download-data:
+    name: Download Historical Data
+    runs-on: ubuntu-latest
+    needs: validate
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[download]') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements-minimal.txt
+
+      - name: Set defaults for manual runs
+        id: set-defaults
+        run: |
+          SYMBOL="${{ github.event.inputs.symbol || 'BTCUSDT' }}"
+          FREQ="${{ github.event.inputs.freq || '5m' }}"
+          STRATEGY="${{ github.event.inputs.strategy || 'conservative' }}"
+
+          echo "symbol=$SYMBOL" >> $GITHUB_OUTPUT
+          echo "freq=$FREQ" >> $GITHUB_OUTPUT
+          echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
+          echo "config=configs/base_$STRATEGY.jsonc" >> $GITHUB_OUTPUT
+
+      - name: Download Binance data
+        env:
+          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+        run: |
+          python -m scripts.download_binance \
+            -c ${{ steps.set-defaults.outputs.config }} \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq ${{ steps.set-defaults.outputs.freq }}
+
+      - name: Upload data artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: raw-data-${{ steps.set-defaults.outputs.symbol }}-${{ steps.set-defaults.outputs.freq }}
+          path: |
+            DATA_ITB_*/*/klines.parquet
+          retention-days: 7
+
+  # ============================================================================
+  # JOB 4: Feature Engineering Pipeline
+  # ============================================================================
+  feature-engineering:
+    name: Merge & Feature Engineering
+    runs-on: ubuntu-latest
+    needs: download-data
+    if: ${{ always() && (needs.download-data.result == 'success' || needs.download-data.result == 'skipped') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements-train.txt
+
+      - name: Set defaults
+        id: set-defaults
+        run: |
+          SYMBOL="${{ github.event.inputs.symbol || 'BTCUSDT' }}"
+          FREQ="${{ github.event.inputs.freq || '5m' }}"
+          STRATEGY="${{ github.event.inputs.strategy || 'conservative' }}"
+
+          echo "symbol=$SYMBOL" >> $GITHUB_OUTPUT
+          echo "freq=$FREQ" >> $GITHUB_OUTPUT
+          echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
+          echo "config=configs/base_$STRATEGY.jsonc" >> $GITHUB_OUTPUT
+
+      - name: Download data artifacts
+        if: needs.download-data.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: raw-data-${{ steps.set-defaults.outputs.symbol }}-${{ steps.set-defaults.outputs.freq }}
+
+      - name: Merge data sources
+        run: |
+          python -m scripts.merge \
+            -c ${{ steps.set-defaults.outputs.config }} \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq ${{ steps.set-defaults.outputs.freq }}
+
+      - name: Generate features
+        run: |
+          python -m scripts.features \
+            -c ${{ steps.set-defaults.outputs.config }} \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq ${{ steps.set-defaults.outputs.freq }}
+
+      - name: Generate labels
+        run: |
+          python -m scripts.labels \
+            -c ${{ steps.set-defaults.outputs.config }} \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq ${{ steps.set-defaults.outputs.freq }}
+
+      - name: Upload feature artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: features-and-labels-${{ steps.set-defaults.outputs.symbol }}-${{ steps.set-defaults.outputs.freq }}
+          path: |
+            DATA_ITB_*/*/features.csv
+            DATA_ITB_*/*/matrix.csv
+            DATA_ITB_*/*/features.txt
+            DATA_ITB_*/*/matrix.labels.txt
+          retention-days: 7
+
+  # ============================================================================
+  # JOB 5: Model Training
+  # ============================================================================
+  train-models:
+    name: Train ML Models
+    runs-on: ubuntu-latest
+    needs: feature-engineering
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements-train.txt
+
+      - name: Set defaults
+        id: set-defaults
+        run: |
+          SYMBOL="${{ github.event.inputs.symbol || 'BTCUSDT' }}"
+          FREQ="${{ github.event.inputs.freq || '5m' }}"
+          STRATEGY="${{ github.event.inputs.strategy || 'conservative' }}"
+
+          echo "symbol=$SYMBOL" >> $GITHUB_OUTPUT
+          echo "freq=$FREQ" >> $GITHUB_OUTPUT
+          echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
+          echo "config=configs/base_$STRATEGY.jsonc" >> $GITHUB_OUTPUT
+
+      - name: Download feature artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: features-and-labels-${{ steps.set-defaults.outputs.symbol }}-${{ steps.set-defaults.outputs.freq }}
+
+      - name: Train models
+        run: |
+          python -m scripts.train \
+            -c ${{ steps.set-defaults.outputs.config }} \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq ${{ steps.set-defaults.outputs.freq }}
+
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-models-${{ steps.set-defaults.outputs.symbol }}-${{ steps.set-defaults.outputs.freq }}
+          path: |
+            DATA_ITB_*/**/MODELS*/**/*.pkl
+            DATA_ITB_*/**/MODELS*/**/*.joblib
+          retention-days: 30
+
+  # ============================================================================
+  # JOB 6: Backtesting & Validation
+  # ============================================================================
+  backtest:
+    name: Backtest Strategy
+    runs-on: ubuntu-latest
+    needs: train-models
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements-train.txt
+
+      - name: Set defaults
+        id: set-defaults
+        run: |
+          SYMBOL="${{ github.event.inputs.symbol || 'BTCUSDT' }}"
+          FREQ="${{ github.event.inputs.freq || '5m' }}"
+          STRATEGY="${{ github.event.inputs.strategy || 'conservative' }}"
+
+          echo "symbol=$SYMBOL" >> $GITHUB_OUTPUT
+          echo "freq=$FREQ" >> $GITHUB_OUTPUT
+          echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
+          echo "config=configs/base_$STRATEGY.jsonc" >> $GITHUB_OUTPUT
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-models-${{ steps.set-defaults.outputs.symbol }}-${{ steps.set-defaults.outputs.freq }}
+
+      - name: Download features
+        uses: actions/download-artifact@v4
+        with:
+          name: features-and-labels-${{ steps.set-defaults.outputs.symbol }}-${{ steps.set-defaults.outputs.freq }}
+
+      - name: Run predictions
+        run: |
+          python -m scripts.predict \
+            -c ${{ steps.set-defaults.outputs.config }} \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq ${{ steps.set-defaults.outputs.freq }}
+
+      - name: Generate signals
+        run: |
+          python -m scripts.signals \
+            -c ${{ steps.set-defaults.outputs.config }} \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq ${{ steps.set-defaults.outputs.freq }}
+
+      - name: Run backtesting simulation
+        run: |
+          python -m scripts.simulate \
+            -c ${{ steps.set-defaults.outputs.config }} \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq ${{ steps.set-defaults.outputs.freq }}
+
+      - name: Display backtest results
+        run: |
+          echo "## Backtest Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat DATA_ITB_${{ steps.set-defaults.outputs.freq }}/${{ steps.set-defaults.outputs.symbol }}/signal_models.txt | head -15 >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload backtest results
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-results-${{ steps.set-defaults.outputs.symbol }}-${{ steps.set-defaults.outputs.freq }}
+          path: |
+            DATA_ITB_*/*/signal_models.txt
+            DATA_ITB_*/*/predictions.csv
+            DATA_ITB_*/*/signals.csv
+          retention-days: 30
+
+  # ============================================================================
+  # JOB 7: Deploy to Azure (Production only)
+  # ============================================================================
+  deploy-azure:
+    name: Deploy to Azure
+    runs-on: ubuntu-latest
+    needs: backtest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set defaults
+        id: set-defaults
+        run: |
+          SYMBOL="${{ github.event.inputs.symbol || 'BTCUSDT' }}"
+          FREQ="${{ github.event.inputs.freq || '5m' }}"
+          echo "symbol=$SYMBOL" >> $GITHUB_OUTPUT
+          echo "freq=$FREQ" >> $GITHUB_OUTPUT
+
+      - name: Download model artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-models-${{ steps.set-defaults.outputs.symbol }}-${{ steps.set-defaults.outputs.freq }}
+          path: ./models
+
+      - name: Upload models to Azure Blob Storage
+        run: |
+          az storage blob upload-batch \
+            --account-name ${{ secrets.AZURE_STORAGE_ACCOUNT }} \
+            --destination models \
+            --source ./models \
+            --overwrite
+
+      - name: Create deployment summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Models deployed to Azure Storage" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Artifacts: $(find ./models -type f | wc -l) files" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 Storage Account: ${{ secrets.AZURE_STORAGE_ACCOUNT }}" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================================
+  # JOB 8: Notification
+  # ============================================================================
+  notify:
+    name: Send Notification
+    runs-on: ubuntu-latest
+    needs: [validate, backtest]
+    if: always()
+
+    steps:
+      - name: Telegram notification (Success)
+        if: ${{ needs.backtest.result == 'success' }}
+        run: |
+          curl -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="✅ Pipeline completed successfully!%0A%0ASymbol: ${{ github.event.inputs.symbol || 'BTCUSDT' }}%0AFreq: ${{ github.event.inputs.freq || '5m' }}%0AStrategy: ${{ github.event.inputs.strategy || 'conservative' }}%0ACommit: ${{ github.sha }}%0ABranch: ${{ github.ref_name }}"
+
+      - name: Telegram notification (Failure)
+        if: ${{ needs.backtest.result == 'failure' }}
+        run: |
+          curl -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="❌ Pipeline failed!%0A%0ACheck: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

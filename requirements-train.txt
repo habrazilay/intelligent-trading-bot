@@ -1,0 +1,14 @@
+# requirements-train.txt
+# Para TREINO DE MODELOS no Azure
+# Inclui: minimal + ferramentas de treino
+# Imagem Docker: ~600MB
+
+# Include minimal requirements
+-r requirements-minimal.txt
+
+# Additional ML dependencies for training
+numba  # For highlow label generator
+dateparser  # For time parsing utilities
+
+# Seaborn for training visualizations (optional)
+# seaborn

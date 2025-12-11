@@ -137,6 +137,53 @@ The service will periodically (for example, every minute) execute these tasks:
 * Aggregate the results of forecasting produced by different ML models and compute the final signal score which reflects the strength of the upward or downward trend. Here we use many previously computed scores as inputs and derive one output score. 
 * Execute functions for interacting with external systems, for example, by sending notifications to a Telegram channel. It is also possible to configure a real trader which will execute buy or sell transactions
 
+# Shadow Mode Analysis & Validation
+
+Before deploying strategies to live trading, it's critical to validate them using **shadow mode analysis**. This ensures that strategies are profitable, risk-adjusted, and ready for real capital.
+
+## Quick Start
+
+```bash
+# Analyze shadow mode logs (V4 - Production Ready)
+python my_tests/analyze_staging_logs_v4.py --log-file server.log
+
+# With custom capital
+python my_tests/analyze_staging_logs_v4.py --starting-capital 5000 --risk-per-trade 1.5
+
+# Using Makefile
+make analyze-staging
+```
+
+## Key Features
+
+- **Dynamic Slippage** - 5-50 bps based on recent volatility (not fixed)
+- **Compounding Equity** - Position sizing = % of capital (realistic)
+- **Hold-time Constraints** - Min 60s + same-candle detection
+- **Execution Failures** - Simulates 2% failures + 5% partial fills
+- **Risk Metrics** - Sharpe, Sortino, Calmar ratios
+- **Drawdown Analysis** - Max DD with recovery time tracking
+- **Pass/Fail Criteria** - Clear thresholds for live approval
+
+## Pass/Fail Criteria (Shadow → Live)
+
+| Criterion | Threshold |
+|-----------|-----------|
+| Min Trades | 100 |
+| Min Win Rate | 52% |
+| Max Drawdown | -15% |
+| Min Sharpe Ratio | 0.5 |
+| Min Profit Factor | 1.3 |
+
+## Full Documentation
+
+See **[docs/SHADOW_MODE_ANALYSIS.md](docs/SHADOW_MODE_ANALYSIS.md)** for complete guide including:
+- How to interpret reports
+- Configuration options
+- Workflow: Shadow → Testnet → Live
+- Troubleshooting
+
+---
+
 # Related projects
 
 - https://github.com/CryptoSignal/Crypto-Signal Github.com/CryptoSignal - #1 Quant Trading & Technical Analysis Bot

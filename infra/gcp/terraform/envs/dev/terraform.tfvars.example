@@ -1,0 +1,25 @@
+# -----------------------------------------------------------------------------
+# GCP Configuration
+# Copy this file to terraform.tfvars and fill in your values
+# -----------------------------------------------------------------------------
+
+# Your GCP Project ID (find in console.cloud.google.com)
+project_id = "your-project-id"
+
+# Region (us-central1 is usually cheapest)
+region = "us-central1"
+zone   = "us-central1-a"
+
+# Environment
+environment  = "dev"
+project_name = "itb"
+
+# -----------------------------------------------------------------------------
+# Secrets (NEVER commit real values!)
+# Option 1: Set here (for local dev only)
+# Option 2: Use TF_VAR_binance_api_key env variable
+# Option 3: Use -var flag: terraform apply -var="binance_api_key=xxx"
+# -----------------------------------------------------------------------------
+
+binance_api_key    = "your-binance-api-key"
+binance_api_secret = "your-binance-api-secret"

@@ -16,16 +16,19 @@ log = logging.getLogger(__name__)
 @click.option("-c", "--config_file", type=click.Path(exists=True), required=True, help="Configuration file path")
 @click.option("--dry-run", is_flag=True, help="Só valida entrada/saída, não grava o arquivo de features")
 @click.option("--log-level", default="INFO", show_default=True, help="Logging level (DEBUG, INFO, WARNING, ERROR)")
-def main(config_file, dry_run, log_level):
+@click.option("--symbol", type=str, default=None, help="Symbol override (e.g., BTCUSDT, ETHUSDT)")
+@click.option("--freq", type=str, default=None, help="Frequency override (e.g., 1m, 5m, 1h)")
+def main(config_file, dry_run, log_level, symbol, freq):
     # Configure logging
     level = getattr(logging, log_level.upper(), logging.INFO)
     logging.basicConfig(level=level, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    load_config(config_file)
+    load_config(config_file, symbol=symbol, freq=freq)
     config = App.config
 
+    # Initialize model store but don't load models (features don't need them)
     App.model_store = ModelStore(config)
-    App.model_store.load_models()
+    # App.model_store.load_models()  # Not needed for features generation
 
     time_column = config.get("time_column", "time")
     if "time_column" not in config:

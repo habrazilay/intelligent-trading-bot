@@ -109,9 +109,21 @@ def _render_progress_bar(pct: float, width: int = 30) -> str:
     required=True,
     help="JSONC configuration file",
 )
-def main(config_file: str):
+@click.option(
+    "--symbol",
+    type=str,
+    default=None,
+    help="Symbol override (e.g., BTCUSDT, ETHUSDT)",
+)
+@click.option(
+    "--freq",
+    type=str,
+    default=None,
+    help="Frequency override (e.g., 1m, 5m, 1h)",
+)
+def main(config_file: str, symbol: str, freq: str):
     load_dotenv()                 # load .env first
-    load_config(config_file)
+    load_config(config_file, symbol=symbol, freq=freq)
 
     time_col = App.config["time_column"]
     data_root = Path(App.config.get("data_folder", "./DATA_ITB")).expanduser()

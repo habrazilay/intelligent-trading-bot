@@ -95,6 +95,16 @@ async def main_collector_task():
     now_ts = now_timestamp()
 
     log.info(f"===> Start collector task. Timestamp {now_ts}. Interval [{start_ts},{end_ts}].")
+    log.info("=== START LIVE SESSION ===")
+    log.info(f"Symbol          : {App.config['symbol']}")
+    log.info(f"Freq (freq)     : {App.config['freq']}")
+    log.info(f"Label horizon   : {App.config.get('label_horizon')}")
+    log.info(f"Features horizon: {App.config.get('features_horizon')}")
+    log.info(f"Train length    : {App.config.get('train_length')}")
+    log.info(f"Algorithms      : {[a['name'] for a in App.config.get('algorithms', [])]}")
+    log.info(f"Trade model     : {App.config.get('trade_model')}")
+    log.info(f"ENABLE_LIVE_TRADING={os.getenv('ENABLE_LIVE_TRADING')}")
+    log.info("============================================")
 
     #
     # 1. Check server state (if necessary)
@@ -235,9 +245,8 @@ def start_server(config_file):
 
     log.info(f"Finished initial data collection.")
 
-    # TODO: Only for binance output and if it has been defined
     # Initialize trade status (account, balances, orders etc.) in case we are going to really execute orders
-    if App.config.get("trade_model", {}).get("trader_binance") and os.getenv("ENABLE_LIVE_TRADING", "false").lower() in ("1", "true", "yes"): 
+    if venue == Venue.BINANCE and App.config.get("trade_model", {}).get("trader_binance"):
         try:
             App.loop.run_until_complete(trader_funcs['update_trade_status']())
         except Exception as e:

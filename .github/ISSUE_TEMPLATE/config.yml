@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Monday.com Board
+    url: https://monday.com
+    about: Track work items in Monday.com for better project management
