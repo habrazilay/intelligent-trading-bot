@@ -116,7 +116,6 @@ def load_config(config_file: str, symbol: str = None, freq: str = None) -> None:
     config_file_path = PACKAGE_ROOT / config_file
     if not config_file_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_file_path}")
-
     # Use config_helper if symbol/freq provided
     if symbol or freq:
         from scripts.config_helper import load_config_with_args
@@ -137,7 +136,6 @@ def load_config(config_file: str, symbol: str = None, freq: str = None) -> None:
             conf_json = json.loads(conf_str)
         except Exception as e:
             raise RuntimeError(f"Erro ao parsear JSON de '{config_file_path}': {e}")
-
     # Replace the in-memory config entirely with the JSON config
     App.config = conf_json
 
