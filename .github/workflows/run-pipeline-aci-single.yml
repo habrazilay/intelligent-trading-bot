@@ -154,7 +154,7 @@ jobs:
             --azure-file-volume-account-name "${{ vars.AZURE_STORAGE_ACCOUNT }}" \
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --azure-file-volume-mount-path "$DATA_MOUNT" \
-            --command-line "sleep 60"
+            --command-line "tail -f /dev/null"
 
           echo ""
           echo "✅ Container created, checking status..."
@@ -164,49 +164,88 @@ jobs:
             --query "{state:provisioningState,containerState:containers[0].instanceView.currentState.state}" \
             -o table
 
-      - name: Wait for container to complete
+      - name: Wait for container to be running
+        timeout-minutes: 5
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          echo "⏳ Waiting for container to be running..."
+
+          for i in {1..20}; do
+            STATE=$(az container show \
+              --name "$CONTAINER_NAME" \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --query "containers[0].instanceView.currentState.state" -o tsv 2>/dev/null || echo "Waiting")
+
+            echo "[$i] Container state: $STATE"
+            if [ "$STATE" = "Running" ]; then
+              echo "✅ Container is running!"
+              break
+            fi
+            sleep 10
+          done
+
+      - name: Run merge
         timeout-minutes: 10
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          echo "📊 Step 1/6: Merge..."
+          az container exec \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --exec-command "python -m scripts.merge -c ${{ env.CONFIG_PATH }} --symbol ${{ env.SYMBOL }} --freq ${{ env.FREQ }}"
 
-          echo "⏳ Waiting for container to complete..."
-          COUNTER=0
+      - name: Run features
+        timeout-minutes: 10
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          echo "🧮 Step 2/6: Features..."
+          az container exec \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --exec-command "python -m scripts.features -c ${{ env.CONFIG_PATH }} --symbol ${{ env.SYMBOL }} --freq ${{ env.FREQ }}"
 
-          while true; do
-            # Get both provisioning state and container state
-            RESULT=$(az container show \
-              --name "$CONTAINER_NAME" \
-              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-              --query "{prov:provisioningState, state:containers[0].instanceView.currentState.state, exit:containers[0].instanceView.currentState.exitCode}" \
-              -o json 2>/dev/null || echo '{"prov":"Unknown","state":"Unknown","exit":null}')
+      - name: Run labels
+        timeout-minutes: 10
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          echo "🏷️ Step 3/6: Labels..."
+          az container exec \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --exec-command "python -m scripts.labels -c ${{ env.CONFIG_PATH }} --symbol ${{ env.SYMBOL }} --freq ${{ env.FREQ }}"
 
-            PROV_STATE=$(echo "$RESULT" | jq -r '.prov')
-            CONTAINER_STATE=$(echo "$RESULT" | jq -r '.state')
-            EXIT_CODE=$(echo "$RESULT" | jq -r '.exit')
+      - name: Run train
+        timeout-minutes: 30
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          echo "🎓 Step 4/6: Train..."
+          az container exec \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --exec-command "python -m scripts.train -c ${{ env.CONFIG_PATH }} --symbol ${{ env.SYMBOL }} --freq ${{ env.FREQ }}"
 
-            echo "[$COUNTER] Provisioning: $PROV_STATE | Container: $CONTAINER_STATE | Exit: $EXIT_CODE"
+      - name: Run predict
+        timeout-minutes: 10
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          echo "🔮 Step 5/6: Predict..."
+          az container exec \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --exec-command "python -m scripts.predict -c ${{ env.CONFIG_PATH }} --symbol ${{ env.SYMBOL }} --freq ${{ env.FREQ }}"
 
-            # Check for terminal states
-            if [ "$CONTAINER_STATE" = "Terminated" ]; then
-              echo ""
-              echo "Container finished with exit code: $EXIT_CODE"
-              if [ "$EXIT_CODE" != "0" ] && [ "$EXIT_CODE" != "null" ]; then
-                echo "❌ Container failed!"
-                exit 1
-              fi
-              echo "✅ Container completed successfully!"
-              break
-            fi
+      - name: Run signals
+        timeout-minutes: 10
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          echo "🚦 Step 6/6: Signals..."
+          az container exec \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --exec-command "python -m scripts.signals -c ${{ env.CONFIG_PATH }} --symbol ${{ env.SYMBOL }} --freq ${{ env.FREQ }}"
 
-            # Check for provisioning failures
-            if [ "$PROV_STATE" = "Failed" ]; then
-              echo "❌ Provisioning failed!"
-              exit 1
-            fi
-
-            COUNTER=$((COUNTER + 1))
-            sleep 15
-          done
+          echo ""
+          echo "✅ Pipeline complete!"
 
       - name: Get container info and logs
         if: always()
