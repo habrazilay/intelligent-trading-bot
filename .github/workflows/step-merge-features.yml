@@ -37,6 +37,7 @@ jobs:
   merge_features:
     name: Merge + Features
     runs-on: ubuntu-latest
+    environment: dev
     env:
       CONFIG: ${{ inputs.config_path || github.event.inputs.config_path || 'configs/base_conservative.jsonc' }}
       SYMBOL: ${{ inputs.symbol || github.event.inputs.symbol || 'BTCUSDT' }}
@@ -55,22 +56,17 @@ jobs:
         run: pip install -r requirements-train.txt
 
       - name: Download data from Azure Files
-        env:
-          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
         run: |
           SHARE_NAME="data-itb-${FREQ}"
           LOCAL_DIR="./DATA_ITB_${FREQ}/${SYMBOL}"
           echo "📥 Downloading from share: $SHARE_NAME/${SYMBOL}"
           mkdir -p "$LOCAL_DIR"
 
-          # Download do diretório do symbol específico
           az storage file download-batch \
-            --account-name "$AZURE_STORAGE_ACCOUNT" \
-            --account-key "$AZURE_STORAGE_KEY" \
+            --account-name "${{ vars.AZURE_STORAGE_ACCOUNT }}" \
+            --account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --source "$SHARE_NAME/${SYMBOL}" \
-            --destination "$LOCAL_DIR" \
-            || echo "⚠️ No data files found"
+            --destination "$LOCAL_DIR"
 
       - name: Debug inputs
         run: |
@@ -92,17 +88,13 @@ jobs:
           python -m scripts.features -c "$CONFIG" --symbol "$SYMBOL" --freq "$FREQ"
 
       - name: Upload results to Azure Files
-        env:
-          AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
         run: |
           SHARE_NAME="data-itb-${FREQ}"
           LOCAL_DIR="./DATA_ITB_${FREQ}/${SYMBOL}"
           echo "📤 Uploading to share: $SHARE_NAME/${SYMBOL}"
           az storage file upload-batch \
-            --account-name "$AZURE_STORAGE_ACCOUNT" \
-            --account-key "$AZURE_STORAGE_KEY" \
+            --account-name "${{ vars.AZURE_STORAGE_ACCOUNT }}" \
+            --account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --destination "$SHARE_NAME" \
             --destination-path "$SYMBOL" \
-            --source "$LOCAL_DIR" \
-            || echo "⚠️ Upload completed"
+            --source "$LOCAL_DIR"
