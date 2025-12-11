@@ -44,6 +44,19 @@ on:
         required: false
         type: boolean
         default: false
+      force_full:
+        description: 'Force full pipeline (ignore cache)'
+        required: false
+        type: boolean
+        default: false
+      cache_days_merge:
+        description: 'Days before re-running merge (default: 7)'
+        required: false
+        default: '7'
+      cache_days_features:
+        description: 'Days before re-running features (default: 1)'
+        required: false
+        default: '1'
 
 jobs:
   run-pipeline:
@@ -184,7 +197,87 @@ jobs:
             sleep 10
           done
 
+      - name: Check cache and determine steps to run
+        id: cache
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          DATA_MOUNT="${{ steps.vars.outputs.data_mount }}"
+          SYMBOL="${{ env.SYMBOL }}"
+          STRATEGY="${{ env.STRATEGY }}"
+          FORCE_FULL="${{ github.event.inputs.force_full }}"
+          CACHE_DAYS_MERGE="${{ github.event.inputs.cache_days_merge || '7' }}"
+          CACHE_DAYS_FEATURES="${{ github.event.inputs.cache_days_features || '1' }}"
+
+          echo "🔍 Checking cache status..."
+          echo "   Force full: $FORCE_FULL"
+          echo "   Merge cache days: $CACHE_DAYS_MERGE"
+          echo "   Features cache days: $CACHE_DAYS_FEATURES"
+
+          if [ "$FORCE_FULL" = "true" ]; then
+            echo "⚠️ Force full enabled - running all steps"
+            echo "run_merge=true" >> $GITHUB_OUTPUT
+            echo "run_features=true" >> $GITHUB_OUTPUT
+            echo "run_labels=true" >> $GITHUB_OUTPUT
+            echo "run_train=true" >> $GITHUB_OUTPUT
+            echo "run_predict=true" >> $GITHUB_OUTPUT
+            echo "run_signals=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check file ages using find inside the container (simpler than Python)
+          DATA_DIR="${DATA_MOUNT}/${SYMBOL}"
+
+          # Get file ages in days using find -mtime
+          get_newest_age() {
+            local pattern=$1
+            az container exec \
+              --name "$CONTAINER_NAME" \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --exec-command "find ${DATA_DIR} -name '${pattern}' -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1" 2>/dev/null | tr -d '\r\n' || echo ""
+          }
+
+          # Get last strategy from marker file
+          LAST_STRATEGY=$(az container exec \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --exec-command "cat ${DATA_DIR}/.last_strategy 2>/dev/null || echo ''" 2>/dev/null | tr -d '\r\n' || echo "")
+
+          echo "📅 Last strategy: '$LAST_STRATEGY'"
+          echo "   Current strategy: '$STRATEGY'"
+
+          # Default: run everything
+          RUN_MERGE="true"
+          RUN_FEATURES="true"
+          RUN_LABELS="true"
+          RUN_TRAIN="true"
+          RUN_PREDICT="true"
+          RUN_SIGNALS="true"
+
+          # Check if strategy changed - if so, must re-run features onwards
+          STRATEGY_CHANGED="false"
+          if [ -n "$LAST_STRATEGY" ] && [ "$LAST_STRATEGY" != "$STRATEGY" ]; then
+            STRATEGY_CHANGED="true"
+            echo "⚠️ Strategy changed - will re-run features onwards"
+          fi
+
+          echo ""
+          echo "📋 Steps to run:"
+          echo "   Merge: $RUN_MERGE"
+          echo "   Features: $RUN_FEATURES"
+          echo "   Labels: $RUN_LABELS"
+          echo "   Train: $RUN_TRAIN"
+          echo "   Predict: $RUN_PREDICT"
+          echo "   Signals: $RUN_SIGNALS"
+
+          echo "run_merge=$RUN_MERGE" >> $GITHUB_OUTPUT
+          echo "run_features=$RUN_FEATURES" >> $GITHUB_OUTPUT
+          echo "run_labels=$RUN_LABELS" >> $GITHUB_OUTPUT
+          echo "run_train=$RUN_TRAIN" >> $GITHUB_OUTPUT
+          echo "run_predict=$RUN_PREDICT" >> $GITHUB_OUTPUT
+          echo "run_signals=$RUN_SIGNALS" >> $GITHUB_OUTPUT
+
       - name: Run merge
+        if: steps.cache.outputs.run_merge == 'true'
         timeout-minutes: 10
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
@@ -194,7 +287,12 @@ jobs:
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --exec-command "python -m scripts.merge -c ${{ env.CONFIG_PATH }} --symbol ${{ env.SYMBOL }} --freq ${{ env.FREQ }}"
 
+      - name: Skip merge
+        if: steps.cache.outputs.run_merge != 'true'
+        run: echo "⏭️ Skipping merge (cached)"
+
       - name: Run features
+        if: steps.cache.outputs.run_features == 'true'
         timeout-minutes: 10
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
@@ -204,7 +302,12 @@ jobs:
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --exec-command "python -m scripts.features -c ${{ env.CONFIG_PATH }} --symbol ${{ env.SYMBOL }} --freq ${{ env.FREQ }}"
 
+      - name: Skip features
+        if: steps.cache.outputs.run_features != 'true'
+        run: echo "⏭️ Skipping features (cached)"
+
       - name: Run labels
+        if: steps.cache.outputs.run_labels == 'true'
         timeout-minutes: 10
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
@@ -214,7 +317,12 @@ jobs:
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --exec-command "python -m scripts.labels -c ${{ env.CONFIG_PATH }} --symbol ${{ env.SYMBOL }} --freq ${{ env.FREQ }}"
 
+      - name: Skip labels
+        if: steps.cache.outputs.run_labels != 'true'
+        run: echo "⏭️ Skipping labels (cached)"
+
       - name: Run train
+        if: steps.cache.outputs.run_train == 'true'
         timeout-minutes: 30
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
@@ -224,7 +332,12 @@ jobs:
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --exec-command "python -m scripts.train -c ${{ env.CONFIG_PATH }} --symbol ${{ env.SYMBOL }} --freq ${{ env.FREQ }}"
 
+      - name: Skip train
+        if: steps.cache.outputs.run_train != 'true'
+        run: echo "⏭️ Skipping train (cached)"
+
       - name: Run predict
+        if: steps.cache.outputs.run_predict == 'true'
         timeout-minutes: 10
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
@@ -235,6 +348,7 @@ jobs:
             --exec-command "python -m scripts.predict -c ${{ env.CONFIG_PATH }} --symbol ${{ env.SYMBOL }} --freq ${{ env.FREQ }}"
 
       - name: Run signals
+        if: steps.cache.outputs.run_signals == 'true'
         timeout-minutes: 10
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
@@ -243,6 +357,18 @@ jobs:
             --name "$CONTAINER_NAME" \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --exec-command "python -m scripts.signals -c ${{ env.CONFIG_PATH }} --symbol ${{ env.SYMBOL }} --freq ${{ env.FREQ }}"
+
+      - name: Save strategy marker
+        run: |
+          CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
+          DATA_MOUNT="${{ steps.vars.outputs.data_mount }}"
+          SYMBOL="${{ env.SYMBOL }}"
+          STRATEGY="${{ env.STRATEGY }}"
+          echo "💾 Saving strategy marker..."
+          az container exec \
+            --name "$CONTAINER_NAME" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --exec-command "echo '${STRATEGY}' > ${DATA_MOUNT}/${SYMBOL}/.last_strategy"
 
           echo ""
           echo "✅ Pipeline complete!"
@@ -285,6 +411,7 @@ jobs:
           echo "   Delete: az container delete --name $CONTAINER_NAME --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} --yes"
 
       - name: Pipeline Summary
+        if: always()
         run: |
           echo "## 🚀 ACI Pipeline Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -293,10 +420,36 @@ jobs:
           echo "**Strategy:** \`${{ env.STRATEGY }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`${{ env.ACR_IMAGE }}:${{ env.IMAGE_TAG }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Steps Executed" >> $GITHUB_STEP_SUMMARY
-          echo "1. Merge" >> $GITHUB_STEP_SUMMARY
-          echo "2. Features" >> $GITHUB_STEP_SUMMARY
-          echo "3. Labels" >> $GITHUB_STEP_SUMMARY
-          echo "4. Train" >> $GITHUB_STEP_SUMMARY
-          echo "5. Predict" >> $GITHUB_STEP_SUMMARY
-          echo "6. Signals" >> $GITHUB_STEP_SUMMARY
+          echo "### Pipeline Steps" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.cache.outputs.run_merge }}" = "true" ]; then
+            echo "| 1. Merge | ✅ Executed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 1. Merge | ⏭️ Skipped (cached) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.cache.outputs.run_features }}" = "true" ]; then
+            echo "| 2. Features | ✅ Executed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 2. Features | ⏭️ Skipped (cached) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.cache.outputs.run_labels }}" = "true" ]; then
+            echo "| 3. Labels | ✅ Executed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 3. Labels | ⏭️ Skipped (cached) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.cache.outputs.run_train }}" = "true" ]; then
+            echo "| 4. Train | ✅ Executed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 4. Train | ⏭️ Skipped (cached) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.cache.outputs.run_predict }}" = "true" ]; then
+            echo "| 5. Predict | ✅ Executed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 5. Predict | ⏭️ Skipped (cached) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ steps.cache.outputs.run_signals }}" = "true" ]; then
+            echo "| 6. Signals | ✅ Executed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| 6. Signals | ⏭️ Skipped (cached) |" >> $GITHUB_STEP_SUMMARY
+          fi

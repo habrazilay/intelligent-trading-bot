@@ -100,11 +100,12 @@ FROM production AS training
 
 LABEL description="Intelligent Trading Bot - Training Mode"
 
-# Install Azure CLI (for GitHub Actions workflows)
+# Install Azure CLI and runtime dependencies for LightGBM
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
     lsb-release \
+    libgomp1 \
     && curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
