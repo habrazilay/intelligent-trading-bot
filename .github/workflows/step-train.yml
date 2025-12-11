@@ -7,15 +7,27 @@ on:
         description: "Config file (e.g., configs/base_conservative.jsonc)"
         required: true
         default: "configs/base_conservative.jsonc"
+      symbol:
+        description: "Trading symbol (e.g., BTCUSDT)"
+        required: true
+        default: "BTCUSDT"
+      freq:
+        description: "Timeframe (1m, 5m, 1h)"
+        required: true
+        default: "5m"
   workflow_call:
     inputs:
       config_path:
         description: "Config file path"
         required: true
         type: string
-      image_tag:
-        description: "Image tag (unused, kept for compatibility)"
-        required: false
+      symbol:
+        description: "Trading symbol"
+        required: true
+        type: string
+      freq:
+        description: "Timeframe"
+        required: true
         type: string
 
 env:
@@ -25,6 +37,10 @@ jobs:
   train:
     name: Train Models
     runs-on: ubuntu-latest
+    env:
+      CONFIG: ${{ inputs.config_path || github.event.inputs.config_path || 'configs/base_conservative.jsonc' }}
+      SYMBOL: ${{ inputs.symbol || github.event.inputs.symbol || 'BTCUSDT' }}
+      FREQ: ${{ inputs.freq || github.event.inputs.freq || '5m' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -44,29 +60,31 @@ jobs:
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
         run: |
           az extension add --name storage-preview 2>/dev/null || true
-          echo "📥 Downloading data from Azure Files..."
+          SHARE_NAME="data-itb-${FREQ}"
+          echo "📥 Downloading from share: $SHARE_NAME"
+          mkdir -p "./DATA_ITB_${FREQ}"
           az storage file download-batch \
             --account-name "$AZURE_STORAGE_ACCOUNT" \
             --account-key "$AZURE_STORAGE_KEY" \
-            --source data-itb-1m \
-            --destination ./DATA_ITB_1m \
-            --pattern "*/matrix.*" || echo "⚠️ No data files found"
+            --source "$SHARE_NAME" \
+            --destination "./DATA_ITB_${FREQ}" \
+            --pattern "${SYMBOL}/*" || echo "⚠️ No data files found"
 
       - name: Run train
         run: |
-          CONFIG="${{ inputs.config_path || github.event.inputs.config_path }}"
-          echo "🤖 Running train with config: $CONFIG"
-          python -m scripts.train -c "$CONFIG"
+          echo "🤖 Running train: $CONFIG --symbol $SYMBOL --freq $FREQ"
+          python -m scripts.train -c "$CONFIG" --symbol "$SYMBOL" --freq "$FREQ"
 
       - name: Upload models to Azure Files
         env:
           AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
         run: |
-          echo "📤 Uploading models to Azure Files..."
+          SHARE_NAME="data-itb-${FREQ}"
+          echo "📤 Uploading to share: $SHARE_NAME"
           az storage file upload-batch \
             --account-name "$AZURE_STORAGE_ACCOUNT" \
             --account-key "$AZURE_STORAGE_KEY" \
-            --destination data-itb-1m \
-            --source ./DATA_ITB_1m \
-            --pattern "*/MODELS*/**" || echo "⚠️ Upload failed"
+            --destination "$SHARE_NAME" \
+            --source "./DATA_ITB_${FREQ}" \
+            --pattern "${SYMBOL}/*" || echo "⚠️ Upload completed"

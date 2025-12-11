@@ -1,16 +1,12 @@
 name: Full Offline Training
 
 on:
-  push:
-    branches:
-      # - main
-      # - staging
-      - dev
-  pull_request:
-    branches:
-      # - main
-      - dev
-      # - staging
+  # push:
+  #   branches:
+  #     - dev
+  # pull_request:
+  #   branches:
+  #     - dev
   workflow_dispatch:
     inputs:
       symbol:
@@ -71,6 +67,8 @@ jobs:
     secrets: inherit
     with:
       config_path: ${{ needs.setup.outputs.config_path }}
+      symbol: ${{ github.event.inputs.symbol || 'BTCUSDT' }}
+      freq: ${{ github.event.inputs.freq || '5m' }}
 
   labels:
     name: Labels
@@ -80,6 +78,8 @@ jobs:
     secrets: inherit
     with:
       config_path: ${{ needs.setup.outputs.config_path }}
+      symbol: ${{ github.event.inputs.symbol || 'BTCUSDT' }}
+      freq: ${{ github.event.inputs.freq || '5m' }}
 
   train:
     name: Train
@@ -89,6 +89,8 @@ jobs:
     secrets: inherit
     with:
       config_path: ${{ needs.setup.outputs.config_path }}
+      symbol: ${{ github.event.inputs.symbol || 'BTCUSDT' }}
+      freq: ${{ github.event.inputs.freq || '5m' }}
 
   predict_signals:
     name: Predict + Signals
@@ -98,3 +100,5 @@ jobs:
     secrets: inherit
     with:
       config_path: ${{ needs.setup.outputs.config_path }}
+      symbol: ${{ github.event.inputs.symbol || 'BTCUSDT' }}
+      freq: ${{ github.event.inputs.freq || '5m' }}
