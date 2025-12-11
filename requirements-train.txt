@@ -6,6 +6,9 @@
 # Include minimal requirements
 -r requirements-minimal.txt
 
+# TA-Lib Python wrapper (requires system ta-lib library)
+ta-lib
+
 # Additional ML dependencies for training
 numba  # For highlow label generator
 dateparser  # For time parsing utilities
