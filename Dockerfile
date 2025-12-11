@@ -77,8 +77,10 @@ COPY configs/ /app/configs/
 # Remove any stray files that might shadow stdlib
 RUN rm -f /app/types.py || true
 
-# Create directory for data
-RUN mkdir -p /app/DATA_ITB_1m /app/DATA_ITB_5m /app/DATA_ITB_1h
+# Data directories will be mounted from Azure File Share or local volumes
+# Do NOT create them here - they should be mounted at runtime:
+#   - Azure: Mount File Share (stitbdev/data-itb-5m → /app/DATA_ITB_5m)
+#   - Local: docker run -v $(pwd)/DATA_ITB_5m:/app/DATA_ITB_5m
 
 # Set Python path
 ENV PYTHONPATH=/app
