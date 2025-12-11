@@ -59,16 +59,17 @@ jobs:
           AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
         run: |
-          az extension add --name storage-preview 2>/dev/null || true
           SHARE_NAME="data-itb-${FREQ}"
-          echo "📥 Downloading from share: $SHARE_NAME"
-          mkdir -p "./DATA_ITB_${FREQ}"
+          LOCAL_DIR="./DATA_ITB_${FREQ}/${SYMBOL}"
+          echo "📥 Downloading from share: $SHARE_NAME/${SYMBOL}"
+          mkdir -p "$LOCAL_DIR"
+
           az storage file download-batch \
             --account-name "$AZURE_STORAGE_ACCOUNT" \
             --account-key "$AZURE_STORAGE_KEY" \
-            --source "$SHARE_NAME" \
-            --destination "./DATA_ITB_${FREQ}" \
-            --pattern "${SYMBOL}/*" || echo "⚠️ No data files found"
+            --source "$SHARE_NAME/${SYMBOL}" \
+            --destination "$LOCAL_DIR" \
+            || echo "⚠️ No data files found"
 
       - name: Run predict
         run: |
@@ -91,10 +92,12 @@ jobs:
           AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
         run: |
           SHARE_NAME="data-itb-${FREQ}"
-          echo "📤 Uploading to share: $SHARE_NAME"
+          LOCAL_DIR="./DATA_ITB_${FREQ}/${SYMBOL}"
+          echo "📤 Uploading to share: $SHARE_NAME/${SYMBOL}"
           az storage file upload-batch \
             --account-name "$AZURE_STORAGE_ACCOUNT" \
             --account-key "$AZURE_STORAGE_KEY" \
             --destination "$SHARE_NAME" \
-            --source "./DATA_ITB_${FREQ}" \
-            --pattern "${SYMBOL}/*" || echo "⚠️ Upload completed"
+            --destination-path "$SYMBOL" \
+            --source "$LOCAL_DIR" \
+            || echo "⚠️ Upload completed"
