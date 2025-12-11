@@ -1,0 +1,40 @@
+# Dockerfile.train
+# Imagem para treino de modelos ML com TA-Lib pre-instalada
+# Build: docker build -f Dockerfile.train -t trading-bot-train .
+
+FROM python:3.11-slim
+
+# Evitar prompts interativos
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Instalar dependencias do sistema e compilar TA-Lib
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    wget \
+    && wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz \
+    && tar -xzf ta-lib-0.4.0-src.tar.gz \
+    && cd ta-lib \
+    && ./configure --prefix=/usr \
+    && make \
+    && make install \
+    && cd .. \
+    && rm -rf ta-lib ta-lib-0.4.0-src.tar.gz \
+    && apt-get purge -y build-essential wget \
+    && apt-get autoremove -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Diretorio de trabalho
+WORKDIR /app
+
+# Copiar requirements primeiro (melhor cache)
+COPY requirements-minimal.txt requirements-train.txt ./
+
+# Instalar dependencias Python
+RUN pip install --no-cache-dir -r requirements-train.txt
+
+# Copiar codigo
+COPY . .
+
+# Comando padrao
+CMD ["python", "--version"]
