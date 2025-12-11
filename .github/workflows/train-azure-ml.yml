@@ -1,0 +1,291 @@
+name: Train Models with Azure ML
+
+on:
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: 'Trading symbol'
+        required: true
+        type: choice
+        options:
+          - BTCUSDT
+          - ETHUSDT
+          - XRPUSDT
+          - BNBUSDT
+          - ALL
+        default: 'BTCUSDT'
+      freq:
+        description: 'Timeframe'
+        required: true
+        type: choice
+        options:
+          - 1m
+          - 5m
+          - 1h
+          - ALL
+        default: '5m'
+      strategy:
+        description: 'Strategy config'
+        required: true
+        type: choice
+        options:
+          - conservative
+          - aggressive
+          - quick_profit
+          - ALL
+        default: 'conservative'
+      compute_cluster:
+        description: 'Compute cluster to use'
+        required: false
+        default: 'itb-training'
+      experiment_name:
+        description: 'MLflow experiment name'
+        required: false
+        default: ''
+
+env:
+  AZURE_ML_WORKSPACE: ${{ vars.AZURE_ML_WORKSPACE }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+
+jobs:
+  prepare:
+    name: Prepare Training Jobs
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Build training matrix
+        id: matrix
+        run: |
+          # Build matrix of training jobs
+          SYMBOLS="${{ github.event.inputs.symbol }}"
+          FREQS="${{ github.event.inputs.freq }}"
+          STRATEGIES="${{ github.event.inputs.strategy }}"
+
+          # Expand ALL options
+          if [ "$SYMBOLS" = "ALL" ]; then
+            SYMBOLS="BTCUSDT,ETHUSDT,XRPUSDT,BNBUSDT"
+          fi
+          if [ "$FREQS" = "ALL" ]; then
+            FREQS="1m,5m,1h"
+          fi
+          if [ "$STRATEGIES" = "ALL" ]; then
+            STRATEGIES="conservative,aggressive,quick_profit"
+          fi
+
+          # Build JSON matrix
+          MATRIX='{"include":['
+          FIRST=true
+
+          IFS=',' read -ra SYMBOL_ARR <<< "$SYMBOLS"
+          IFS=',' read -ra FREQ_ARR <<< "$FREQS"
+          IFS=',' read -ra STRATEGY_ARR <<< "$STRATEGIES"
+
+          for symbol in "${SYMBOL_ARR[@]}"; do
+            for freq in "${FREQ_ARR[@]}"; do
+              for strategy in "${STRATEGY_ARR[@]}"; do
+                if [ "$FIRST" = true ]; then
+                  FIRST=false
+                else
+                  MATRIX+=','
+                fi
+                MATRIX+="{\"symbol\":\"$symbol\",\"freq\":\"$freq\",\"strategy\":\"$strategy\"}"
+              done
+            done
+          done
+
+          MATRIX+=']}'
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "Training matrix:"
+          echo "$MATRIX" | jq .
+
+  train:
+    name: Train ${{ matrix.symbol }}/${{ matrix.freq }}/${{ matrix.strategy }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: dev
+    strategy:
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+      fail-fast: false
+      max-parallel: 4
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Azure ML SDK
+        run: |
+          pip install azure-ai-ml azure-identity mlflow azureml-mlflow
+
+      - name: Submit Azure ML Job
+        id: submit_job
+        env:
+          SYMBOL: ${{ matrix.symbol }}
+          FREQ: ${{ matrix.freq }}
+          STRATEGY: ${{ matrix.strategy }}
+          COMPUTE_CLUSTER: ${{ github.event.inputs.compute_cluster }}
+          EXPERIMENT_NAME: ${{ github.event.inputs.experiment_name }}
+        run: |
+          python << 'EOF'
+          import os
+          import json
+          from azure.ai.ml import MLClient, command, Input
+          from azure.ai.ml.entities import Environment, BuildContext
+          from azure.identity import DefaultAzureCredential
+
+          # Get config from environment
+          subscription_id = os.popen("az account show --query id -o tsv").read().strip()
+          resource_group = os.environ.get("AZURE_RESOURCE_GROUP")
+          workspace_name = os.environ.get("AZURE_ML_WORKSPACE")
+
+          symbol = os.environ.get("SYMBOL")
+          freq = os.environ.get("FREQ")
+          strategy = os.environ.get("STRATEGY")
+          compute_cluster = os.environ.get("COMPUTE_CLUSTER", "itb-training")
+          experiment_name = os.environ.get("EXPERIMENT_NAME") or f"itb-{strategy}"
+
+          print(f"Connecting to Azure ML workspace: {workspace_name}")
+
+          # Connect to Azure ML
+          credential = DefaultAzureCredential()
+          ml_client = MLClient(
+              credential=credential,
+              subscription_id=subscription_id,
+              resource_group_name=resource_group,
+              workspace_name=workspace_name,
+          )
+
+          print(f"Submitting training job:")
+          print(f"  Symbol: {symbol}")
+          print(f"  Freq: {freq}")
+          print(f"  Strategy: {strategy}")
+          print(f"  Compute: {compute_cluster}")
+          print(f"  Experiment: {experiment_name}")
+
+          # Define the training command
+          config_path = f"configs/base_{strategy}.jsonc"
+          run_name = f"{symbol}_{freq}_{strategy}"
+
+          job = command(
+              code=".",
+              command=f"""
+                  pip install -r requirements-train.txt && \
+                  python -m scripts.merge -c {config_path} --symbol {symbol} --freq {freq} && \
+                  python -m scripts.features -c {config_path} --symbol {symbol} --freq {freq} && \
+                  python -m scripts.labels -c {config_path} --symbol {symbol} --freq {freq} && \
+                  python -m scripts.train -c {config_path} --symbol {symbol} --freq {freq} && \
+                  python -m scripts.predict -c {config_path} --symbol {symbol} --freq {freq} && \
+                  python -m scripts.signals -c {config_path} --symbol {symbol} --freq {freq}
+              """,
+              environment="azureml://registries/azureml/environments/sklearn-1.5/versions/4",
+              compute=compute_cluster,
+              experiment_name=experiment_name,
+              display_name=run_name,
+              inputs={
+                  "data": Input(
+                      type="uri_folder",
+                      path=f"azureml://datastores/datastore_itb_{freq}/paths/{symbol}",
+                  )
+              },
+              environment_variables={
+                  "MLFLOW_TRACKING_URI": ml_client.workspaces.get(workspace_name).mlflow_tracking_uri,
+                  "SYMBOL": symbol,
+                  "FREQ": freq,
+                  "STRATEGY": strategy,
+              },
+          )
+
+          # Submit job
+          returned_job = ml_client.jobs.create_or_update(job)
+
+          print(f"\nJob submitted successfully!")
+          print(f"Job name: {returned_job.name}")
+          print(f"Job status: {returned_job.status}")
+          print(f"Studio URL: {returned_job.studio_url}")
+
+          # Save job info for later steps
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"job_name={returned_job.name}\n")
+              f.write(f"studio_url={returned_job.studio_url}\n")
+
+          EOF
+
+      - name: Wait for Job Completion
+        if: success()
+        run: |
+          echo "Job submitted: ${{ steps.submit_job.outputs.job_name }}"
+          echo "Monitor at: ${{ steps.submit_job.outputs.studio_url }}"
+
+          # Poll job status
+          for i in {1..60}; do
+            STATUS=$(az ml job show \
+              --name "${{ steps.submit_job.outputs.job_name }}" \
+              --workspace-name "${{ env.AZURE_ML_WORKSPACE }}" \
+              --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+              --query status -o tsv 2>/dev/null || echo "Unknown")
+
+            echo "[$i/60] Job status: $STATUS"
+
+            if [ "$STATUS" = "Completed" ]; then
+              echo "Job completed successfully!"
+              exit 0
+            elif [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Canceled" ]; then
+              echo "Job failed with status: $STATUS"
+              exit 1
+            fi
+
+            sleep 60
+          done
+
+          echo "Job timed out waiting for completion"
+          exit 1
+
+      - name: Download Results
+        if: success()
+        run: |
+          mkdir -p outputs
+
+          az ml job download \
+            --name "${{ steps.submit_job.outputs.job_name }}" \
+            --workspace-name "${{ env.AZURE_ML_WORKSPACE }}" \
+            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --output-name outputs \
+            --download-path ./outputs || echo "No outputs to download"
+
+      - name: Upload Artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: training-outputs-${{ matrix.symbol }}-${{ matrix.freq }}-${{ matrix.strategy }}
+          path: outputs/
+          retention-days: 30
+
+  summary:
+    name: Training Summary
+    needs: [prepare, train]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## Training Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Symbol | Freq | Strategy | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|----------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Parse matrix and results
+          MATRIX='${{ needs.prepare.outputs.matrix }}'
+          echo "$MATRIX" | jq -r '.include[] | "| \(.symbol) | \(.freq) | \(.strategy) | - |"' >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View experiments in [Azure ML Studio](https://ml.azure.com)" >> $GITHUB_STEP_SUMMARY

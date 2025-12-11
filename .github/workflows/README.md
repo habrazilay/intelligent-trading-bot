@@ -30,19 +30,17 @@ Workflows automatizados para pipeline de trading no Azure.
   - `btcusdt_5m_aggressive.jsonc` - Estratégia agressiva
   - `btcusdt_5m_orderflow.jsonc` - Com features orderflow
 
-## 🔧 Variáveis Compartilhadas
+## 🔧 Variáveis e Secrets
 
-### Azure Container Registry (ACR)
-```yaml
-ACR_LOGIN_SERVER: itbacr.azurecr.io
-ACR_REPOSITORY: itb-bot
-```
+### Repository Variables (vars)
+Configure em: **Settings → Secrets and variables → Actions → Variables**
 
-### Azure Resources
-```yaml
-AZURE_RESOURCE_GROUP: rg-itb-dev
-AZURE_STORAGE_ACCOUNT: stitbdev
-```
+| Variable | Valor | Descrição |
+|----------|-------|-----------|
+| `ACR_LOGIN_SERVER` | `itbacr.azurecr.io` | Azure Container Registry server |
+| `AZURE_RESOURCE_GROUP` | `rg-itb-dev` | Resource group do Terraform |
+| `AZURE_STORAGE_ACCOUNT` | `stitbdev` | Storage account name |
+| `AZURE_ML_WORKSPACE` | `mlw-itb-dev` | Azure ML workspace name |
 
 ### File Shares (por timeframe)
 ```yaml
@@ -52,16 +50,16 @@ AZURE_FILE_SHARE: data-itb-1h    # Para configs *_1h_*
 ```
 
 ### Secrets Necessários
-Configure em: **Settings → Secrets and variables → Actions**
+Configure em: **Settings → Secrets and variables → Actions → Secrets**
 
-```
-AZURE_CREDENTIALS      # Service Principal JSON
-ACR_USERNAME           # Azure Container Registry username
-ACR_PASSWORD           # Azure Container Registry password
-AZURE_STORAGE_KEY      # Storage account key
-BINANCE_API_KEY        # Binance API key (read-only)
-BINANCE_API_SECRET     # Binance API secret
-```
+| Secret | Descrição |
+|--------|-----------|
+| `AZURE_CREDENTIALS` | Service Principal JSON |
+| `ACR_USERNAME` | Azure Container Registry username |
+| `ACR_PASSWORD` | Azure Container Registry password |
+| `AZURE_STORAGE_KEY` | Storage account key |
+| `BINANCE_API_KEY` | Binance API key (read-only) |
+| `BINANCE_API_SECRET` | Binance API secret |
 
 ## 🚀 Como Usar
 

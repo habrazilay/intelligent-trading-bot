@@ -53,8 +53,8 @@ on:
 
 env:
   DOCKERHUB_IMAGE: habrazilay/itb-bot
-  ACR_LOGIN_SERVER: itbacr.azurecr.io
-  ACR_IMAGE: itbacr.azurecr.io/itb-bot
+  ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+  ACR_IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/itb-bot
 
 jobs:
   # =============================================================================

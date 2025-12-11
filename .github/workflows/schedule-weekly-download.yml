@@ -25,10 +25,10 @@ on:
         type: string
 
 env:
-  ACR_LOGIN_SERVER: itbacr.azurecr.io
+  ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
   ACR_REPOSITORY: itb-bot
-  AZURE_RESOURCE_GROUP: rg-itb-dev
-  AZURE_STORAGE_ACCOUNT: stitbdev
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  AZURE_STORAGE_ACCOUNT: ${{ vars.AZURE_STORAGE_ACCOUNT }}
   AZURE_FILE_SHARE: data-itb-1m
   DATA_MOUNT_PATH: /app/DATA_ITB_1m
 
