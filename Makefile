@@ -170,6 +170,11 @@ download:
 	@echo "Downloading data for $(SYMBOL)..."
 	python -m scripts.download_binance -c $(CONFIG)
 
+# Generic download (new)
+download-generic:
+	@echo "Downloading $(SYMBOL) $(FREQ)..."
+	python -m scripts.download_binance -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+
 merge:
 	@echo "Merging data..."
 	python -m scripts.merge -c $(CONFIG)
@@ -204,6 +209,7 @@ pipeline-generic:
 	@echo "  Config: $(BASE_CONFIG)"
 	@echo "  Symbol: $(SYMBOL)"
 	@echo "  Freq:   $(FREQ)"
+	python -m scripts.download_binance -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
 	python -m scripts.merge -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
 	python -m scripts.features -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
 	python -m scripts.labels -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
