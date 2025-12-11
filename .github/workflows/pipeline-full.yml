@@ -45,30 +45,23 @@ on:
           - train-only
           - predict-only
         default: 'full'
-      image_tag:
-        description: "Docker image tag (e.g., v1.0.0-dev, dev, staging)"
-        required: true
-        default: "dev"
 
 jobs:
-  # Build config_path from inputs
   setup:
-    name: Setup Pipeline
+    name: Setup
     runs-on: ubuntu-latest
     outputs:
       config_path: ${{ steps.set-config.outputs.config_path }}
-      image_tag: ${{ steps.set-config.outputs.image_tag }}
     steps:
-      - name: Set config path from inputs
+      - name: Set config path
         id: set-config
         run: |
           STRATEGY="${{ github.event.inputs.strategy || 'conservative' }}"
-          IMAGE_TAG="${{ github.event.inputs.image_tag || 'dev' }}"
           CONFIG_PATH="configs/base_${STRATEGY}.jsonc"
           echo "config_path=$CONFIG_PATH" >> $GITHUB_OUTPUT
-          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
           echo "📋 Config: $CONFIG_PATH"
-          echo "🐳 Image tag: $IMAGE_TAG"
+          echo "📊 Symbol: ${{ github.event.inputs.symbol || 'BTCUSDT' }}"
+          echo "⏱️ Freq: ${{ github.event.inputs.freq || '5m' }}"
 
   merge_features:
     name: Merge + Features
@@ -78,27 +71,24 @@ jobs:
     secrets: inherit
     with:
       config_path: ${{ needs.setup.outputs.config_path }}
-      image_tag: ${{ needs.setup.outputs.image_tag }}
 
   labels:
-    name: Generate Labels
+    name: Labels
     needs: [setup, merge_features]
     if: ${{ github.event.inputs.pipeline_mode != 'predict-only' }}
     uses: ./.github/workflows/step-labels.yml
     secrets: inherit
     with:
       config_path: ${{ needs.setup.outputs.config_path }}
-      image_tag: ${{ needs.setup.outputs.image_tag }}
 
   train:
-    name: Train Models
+    name: Train
     needs: [setup, labels]
     if: ${{ github.event.inputs.pipeline_mode != 'predict-only' }}
     uses: ./.github/workflows/step-train.yml
     secrets: inherit
     with:
       config_path: ${{ needs.setup.outputs.config_path }}
-      image_tag: ${{ needs.setup.outputs.image_tag }}
 
   predict_signals:
     name: Predict + Signals
@@ -108,4 +98,3 @@ jobs:
     secrets: inherit
     with:
       config_path: ${{ needs.setup.outputs.config_path }}
-      image_tag: ${{ needs.setup.outputs.image_tag }}
