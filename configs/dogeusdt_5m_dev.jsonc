@@ -1,0 +1,62 @@
+{
+  "train": true,
+  "venue": "binance",
+  "api_key": "",
+  "api_secret": "",
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+  "data_folder": "./DATA_ITB_5m",
+  "symbol": "DOGEUSDT",
+  "description": "DOGEUSDT 5 minute strategy",
+  "freq": "5m",
+  "pandas_freq": "5min",
+  "feature_file_name": "features.csv",
+  "merge_file_name":   "data.csv",
+  "matrix_file_name":  "matrix.csv",
+  "label_horizon":   12,
+  "features_horizon":288,
+  "train_length":    60000,
+  "predict_length":  2016,
+  "append_overlap_records": 5,
+  "data_sources": [
+    { "folder": "DOGEUSDT", "file": "klines", "column_prefix": "" }
+  ],
+  "download_start": "2022-01-01",
+  "download_end":   null,
+  "merge_interpolate": false,
+  "feature_sets": [
+    { "generator": "talib", "config": { "columns": ["close"], "functions": ["SMA"], "windows": [12, 48, 288, 2016] } },
+    { "generator": "talib", "config": { "columns": ["close"], "functions": ["RSI"], "windows": [14] } },
+    { "generator": "talib", "config": { "columns": ["close"], "functions": ["LINEARREG_SLOPE"], "windows": [12, 48, 288] } },
+    { "generator": "talib", "config": { "columns": ["high","low","close"], "functions": ["ATR"], "windows": [14] } },
+    { "generator": "talib", "config": { "columns": ["close"], "functions": ["STDDEV"], "windows": [12, 288] } }
+  ],
+  "label_sets": [
+    { "generator": "highlow2", "config": { "columns": ["close","high","low"], "function": "high", "thresholds": [1.5], "tolerance": 0.15, "horizon": 12, "names": ["high_15"] } },
+    { "generator": "highlow2", "config": { "columns": ["close","high","low"], "function": "low", "thresholds": [1.5], "tolerance": 0.15, "horizon": 12, "names": ["low_15"] } }
+  ],
+  "train_feature_sets": [ { "generator": "train_features", "config": { } } ],
+  "train_features": [
+    "close_SMA_12","close_SMA_48","close_SMA_288","close_SMA_2016",
+    "close_RSI_14",
+    "close_LINEARREG_SLOPE_12","close_LINEARREG_SLOPE_48","close_LINEARREG_SLOPE_288",
+    "high_low_close_ATR_14","close_STDDEV_12","close_STDDEV_288"
+  ],
+  "labels": ["high_15","low_15"],
+  "algorithms": [
+    { "name": "lc", "algo": "lc", "params": { "is_scale": true }, "train": { "penalty": "l2", "C": 1.0, "solver": "sag", "max_iter": 500 } }
+  ],
+  "signal_sets": [
+    { "generator": "combine", "config": { "columns": ["high_15_lc","low_15_lc"], "names": "trade_score", "combine": "difference" } },
+    { "generator": "threshold_rule", "config": { "columns": "trade_score", "names": ["buy_signal","sell_signal"], "parameters": { "buy_signal_threshold": 0.015, "sell_signal_threshold": -0.015 } } }
+  ],
+  "output_sets": [
+    { "generator": "score_notification_model", "config": { "score_notification": true, "score_column_names": ["trade_score"] } },
+    { "generator": "trader_simulation", "config": { "buy_signal_column": "buy_signal", "sell_signal_column": "sell_signal" } }
+  ],
+  "simulate_model": {
+    "data_start": 0, "data_end": null, "direction": "long", "topn_to_store": 10,
+    "signal_generator": "threshold_rule", "buy_sell_equal": false,
+    "grid": { "buy_signal_threshold":  [0.01, 0.015, 0.02], "sell_signal_threshold": [-0.01, -0.015, -0.02] }
+  }
+}

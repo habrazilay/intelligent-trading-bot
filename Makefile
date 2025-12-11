@@ -62,9 +62,9 @@ help:
 	@echo "    make analyze-1m                      - Legacy: analyze_btcusdt_1m.py"
 	@echo ""
 	@echo "  Upload to Azure:"
-	@echo "    make upload-1m        - Upload BTCUSDT 1m to Azure Files"
-	@echo "    make upload-5m        - Upload BTCUSDT 5m to Azure Files"
-	@echo "    make upload-1h        - Upload BTCUSDT 1h to Azure Files"
+	@echo "    make upload-all       - Upload ALL data from DATA_ITB_*"
+	@echo "    make upload-list      - List available data for upload"
+	@echo "    make upload SYMBOL=BTCUSDT FREQ=5m  - Upload specific"
 	@echo ""
 	@echo "  Staging:"
 	@echo "    make staging-1m       - Run staging 1m (shadow mode)"
@@ -418,17 +418,30 @@ analyze-1m:
 # Upload to Azure Files
 # =============================================================================
 
+upload-all:
+	@echo ">> upload ALL data to Azure Files"
+	./tools/upload_data.sh
+
+upload-list:
+	@echo ">> list available data for upload"
+	./tools/upload_data.sh --list
+
+upload:
+	@echo ">> upload $(SYMBOL) $(FREQ) to Azure Files"
+	./tools/upload_data.sh $(SYMBOL) $(FREQ)
+
+# Legacy targets (use upload-all instead)
 upload-1m:
 	@echo ">> upload BTCUSDT 1m para Azure Files"
-	./tools/upload_1m_parquet.sh $(VERSION)
+	./tools/upload_data.sh BTCUSDT 1m
 
 upload-5m:
 	@echo ">> upload BTCUSDT 5m para Azure Files"
-	./tools/upload_5m_parquet.sh $(VERSION)
+	./tools/upload_data.sh BTCUSDT 5m
 
 upload-1h:
 	@echo ">> upload BTCUSDT 1h para Azure Files"
-	./tools/upload_1h_parquet.sh $(VERSION)
+	./tools/upload_data.sh BTCUSDT 1h
 
 # =============================================================================
 # Staging (Shadow Mode)
