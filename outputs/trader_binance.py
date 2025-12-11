@@ -84,8 +84,7 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
     # Check circuit breaker before any trading
     if not risk_manager.is_trading_allowed():
         remaining = risk_manager.circuit_breaker.time_until_reset()
-        print(f"🚨 CIRCUIT BREAKER ACTIVE - Trading paused. Remaining: {remaining}")
-        log.warning("Circuit breaker active. Trading paused. Remaining: %s", remaining)
+        log.warning("CIRCUIT BREAKER ACTIVE - Trading paused. Remaining: %s", remaining)
         return
 
     #
@@ -114,7 +113,6 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
         if order_status == ORDER_STATUS_FILLED:
             log.info(f"Limit order filled. {order}")
             if status == "BUYING":
-                print(f"===> BOUGHT: {order}")
                 log.info("===> BOUGHT: %s", order)
                 App.status = "BOUGHT"
                 # Register position in risk manager
@@ -122,7 +120,6 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
                 quantity = Decimal(str(order.get("executedQty", "0")))
                 risk_manager.open_position(entry_price, "BUY", quantity)
             elif status == "SELLING":
-                print(f"<=== SOLD: {order}")
                 log.info("<=== SOLD: %s", order)
                 App.status = "SOLD"
                 # Close position in risk manager
@@ -186,7 +183,6 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
 
         if exit_reason:
             # Risk management triggered - force sell
-            print(f"🛑 RISK MANAGEMENT: {exit_reason.upper()} triggered at {close_price:.2f}")
             log.warning("RISK MANAGEMENT: %s triggered at %.2f", exit_reason.upper(), close_price)
 
             # Override signal to force SELL
@@ -197,42 +193,63 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
     # 4. Trade by creating orders
     #
     if signal_side == "BUY":
-        print(f"===> BUY SIGNAL {signal}: ")
         log.info("===> BUY SIGNAL %s", signal)
     elif signal_side == "SELL":
-        print(f"<=== SELL SIGNAL: {signal}")
         log.info("<=== SELL SIGNAL %s", signal)
     else:
         if close_price is not None:
-            print(f"PRICE: {close_price:.2f}")
             log.info("PRICE: %.2f", close_price)
         else:
-            print("PRICE: n/a")
             log.info("PRICE: n/a")
 
     # Update account balance etc. what is needed for trade
     await update_account_balance()
 
-    if status == "SOLD" and signal_side == "BUY":
+    # Shadow mode: allows testing order creation regardless of balance-based status
+    # When shadow_mode is True, BUY signals will create test orders even if status is "BOUGHT"
+    trade_model = config.get("trade_model", {})
+    shadow_mode = trade_model.get("shadow_mode", False)
+
+    # Log the decision-making process
+    log.info("Trade decision: status=%s, signal_side=%s, shadow_mode=%s", status, signal_side, shadow_mode)
+
+    # Determine if we should attempt to create an order
+    should_buy = (status == "SOLD" and signal_side == "BUY")
+    should_sell = (status == "BOUGHT" and signal_side == "SELL")
+
+    # In shadow mode, allow order creation for testing purposes regardless of status
+    if shadow_mode and signal_side == "BUY" and not should_buy:
+        log.info("SHADOW MODE: Overriding status check for BUY signal (status was %s)", status)
+        should_buy = True
+    if shadow_mode and signal_side == "SELL" and not should_sell:
+        log.info("SHADOW MODE: Overriding status check for SELL signal (status was %s)", status)
+        should_sell = True
+
+    if should_buy:
         order = await new_limit_order(side=SIDE_BUY)
 
         if not order:
             log.info("No BUY order created; keeping status as %s.", App.status)
         elif model.get("no_trades_only_data_processing"):
-            print("SKIP TRADING due to 'no_trades_only_data_processing' parameter True")
-            # Never change status if orders not executed
+            log.info("SKIP TRADING due to 'no_trades_only_data_processing' parameter True")
+        elif shadow_mode:
+            log.info("SHADOW MODE: Test order created but not changing status")
         else:
             App.status = "BUYING"
-    elif status == "BOUGHT" and signal_side == "SELL":
+    elif should_sell:
         order = await new_limit_order(side=SIDE_SELL)
 
         if not order:
             log.info("No SELL order created; keeping status as %s.", App.status)
         elif model.get("no_trades_only_data_processing"):
-            print("SKIP TRADING due to 'no_trades_only_data_processing' parameter True")
-            # Never change status if orders not executed
+            log.info("SKIP TRADING due to 'no_trades_only_data_processing' parameter True")
+        elif shadow_mode:
+            log.info("SHADOW MODE: Test order created but not changing status")
         else:
             App.status = "SELLING"
+    elif signal_side in ("BUY", "SELL"):
+        log.info("Signal %s ignored: current status is %s (need %s to act on this signal)",
+                 signal_side, status, "SOLD" if signal_side == "BUY" else "BOUGHT")
 
     log.info("<=== End trade task.")
     return
@@ -262,17 +279,23 @@ async def update_trade_status():
         if last_kline is None:
             last_close_price = Decimal("0")
         else:
-            last_close_price = to_decimal(last_kline.iloc[4])
+            last_close_price = to_decimal(last_kline['close'])
 
         base_quantity = App.account_info.base_quantity  # BTC
         btc_assets_in_usd = base_quantity * last_close_price if last_close_price != 0 else Decimal("0")
 
         usd_assets = App.account_info.quote_quantity  # USDT
 
+        # Log the balance comparison for debugging
+        log.info("Status inference: BTC=%s (value=$%.2f), USDT=$%.2f, price=%.2f",
+                 base_quantity, float(btc_assets_in_usd), float(usd_assets), float(last_close_price))
+
         if usd_assets >= btc_assets_in_usd:
             App.status = "SOLD"
+            log.info("Status set to SOLD (USDT >= BTC value)")
         else:
             App.status = "BOUGHT"
+            log.info("Status set to BOUGHT (BTC value > USDT)")
 
     elif len(open_orders) == 1:
         order = open_orders[0]
@@ -419,7 +442,7 @@ async def new_limit_order(side):
     if last_kline is None:
         log.error("Cannot determine last close price in order to create a limit order (no kline).")
         return None
-    last_close_price = to_decimal(last_kline.iloc[4])
+    last_close_price = to_decimal(last_kline['close'])
 
     raw_adj = trade_model.get("limit_price_adjustment", 0)
     # Normalize and clamp price adjustment to a sane range [0, 0.05] (0–5%)
@@ -518,7 +541,7 @@ async def new_limit_order(side):
     )
 
     if trade_model.get("no_trades_only_data_processing"):
-        print(f"NOT executed order spec: {order_spec}")
+        log.info("NOT executed order spec (no_trades_only_data_processing=True): %s", order_spec)
         return None
 
     order = execute_order(order_spec)
@@ -548,7 +571,7 @@ def execute_order(order: dict):
             return None
 
     if trade_model.get("simulate_order_execution"):
-        print(order)
+        log.info("Simulated order execution: %s", order)
         return order
 
     try:

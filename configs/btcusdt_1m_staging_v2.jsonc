@@ -180,6 +180,11 @@
     "test_order_before_submit": true,
     "simulate_order_execution": false,
 
+    // Shadow mode: bypass balance-based status check to test order creation
+    // When true, allows BUY orders even if BTC value > USDT (status="BOUGHT")
+    // Useful for testing with mixed balances - orders are still test orders only
+    "shadow_mode": true,
+
     "percentage_used_for_trade": 2.0,       // 2% do saldo de USDT
     "min_notional_usdt": 5.0,               // Binance não aceita menos que ~US$5 por ordem
     "min_balance_usdt_for_percentage": 500.0,  // abaixo disso, ignora porcentagem e usa min_notional como referência
