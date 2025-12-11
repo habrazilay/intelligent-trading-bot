@@ -254,9 +254,13 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
                 if w:
                     args['timeperiod'] = w
                 if w == 1 and len(fn_columns) == 1:  # For window 1 use the original values (because talib fails to do this)
-                    out = next(iter(fn_columns.values()))
+                    out = next(iter(fn_columns.values())).copy()
                 else:
                     out = fn(**args)
+
+                # Ensure out is always a Series
+                if not isinstance(out, pd.Series):
+                    out = pd.Series(out, index=df.index)
 
             #
             # Online: In a loop, compute the specified number of single values for the manually prepared windows
