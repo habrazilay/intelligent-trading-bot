@@ -1,6 +1,7 @@
 import os
 import sys
 import importlib
+import inspect
 from datetime import datetime, timezone, timedelta
 from typing import Union
 import json
@@ -277,8 +278,15 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
                     raise ValueError(f"Cannot resolve talib function name '{func_name}'. Check the (existence of) name of the function")
 
                 args = fn_columns.copy()
-                if w:
+
+                # Some TA-Lib functions don't accept 'timeperiod' parameter (e.g., OBV, AD, ADOSC)
+                # Check if the function accepts timeperiod before adding it
+                fn_sig = inspect.signature(fn)
+                accepts_timeperiod = 'timeperiod' in fn_sig.parameters
+
+                if w and accepts_timeperiod:
                     args['timeperiod'] = w
+
                 if w == 1 and len(fn_columns) == 1:  # For window 1 use the original values (because talib fails to do this)
                     out = next(iter(fn_columns.values())).copy()
                 else:
@@ -339,13 +347,17 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
                 except AttributeError as e:
                     raise ValueError(f"Cannot resolve talib.stream function name '{func_name}'. Check the (existence of) name of the function")
 
+                # Check if the function accepts timeperiod before adding it
+                fn_sig = inspect.signature(fn)
+                accepts_timeperiod = 'timeperiod' in fn_sig.parameters
+
                 # Here fn (function) is a different function from a different module (this function is applied to a single window rather than to rolling windows)
                 out_values = []
                 for r in range(last_rows):
                     # Remove r elements from the end
                     # Note that we do not remove elements from the start so the length is limited from one side only
                     args = {k: v.iloc[:len(v)-r] for k, v in fn_columns.items()}
-                    if w:
+                    if w and accepts_timeperiod:
                         args['timeperiod'] = w
 
                     if w == 1 and len(fn_columns) == 1:  # For window 1 use the original values (because talib fails to do this)
