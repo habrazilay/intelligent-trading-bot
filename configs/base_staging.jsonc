@@ -55,39 +55,28 @@
 
   // === FEATURES ==============================================================
   // STAGING: Must match features used in training
+  // Using TESTED configuration from btcusdt_5m_staging_v2.jsonc
 
   "feature_sets": [
-    // Moving Averages
     { "generator":"talib",
-      "config":{"columns":["close"],"functions":["SMA"],"windows":[5,10,20,60,120]}},
-    { "generator":"talib",
-      "config":{"columns":["close"],"functions":["EMA"],"windows":[12,26]}},
+      "config":{"columns":["close"],"functions":["SMA"],"windows":[5,10,20,60]}},
 
-    // Momentum
     { "generator":"talib",
       "config":{"columns":["close"],"functions":["RSI"],"windows":[14]}},
+
     { "generator":"talib",
       "config":{"columns":["close"],"functions":["LINEARREG_SLOPE"],"windows":[10,20,60]}},
-    { "generator":"talib",
-      "config":{"columns":["close"],"functions":["MOM"],"windows":[10]}},
 
-    // Volatility
     { "generator":"talib",
       "config":{"columns":["high","low","close"],"functions":["ATR"],"windows":[14]}},
-    { "generator":"talib",
-      "config":{"columns":["close"],"functions":["STDDEV"],"windows":[20,60]}},
-    { "generator":"talib",
-      "config":{"columns":["close"],"functions":["BBANDS"],"windows":[20]}},
 
-    // Volume
     { "generator":"talib",
-      "config":{"columns":["close","volume"],"functions":["OBV"],"windows":[1]}},
-    { "generator":"talib",
-      "config":{"columns":["volume"],"functions":["SMA"],"windows":[20]}}
+      "config":{"columns":["close"],"functions":["STDDEV"],"windows":[20,60]}}
   ],
 
   // === LABELS ================================================================
   // STAGING: Labels not used (no training), but needed for config
+  // Using TESTED thresholds from btcusdt_5m_staging_v2.jsonc
 
   "label_sets": [
     {
@@ -95,10 +84,10 @@
       "config":{
         "columns": ["close","high","low"],
         "function": "high",
-        "thresholds": [0.4],
-        "tolerance": 0.1,
+        "thresholds": [0.5],
+        "tolerance": 0.05,
         "horizon": 24,
-        "names": ["high_04_24"]
+        "names": ["high_05_24"]
       }
     },
     {
@@ -106,10 +95,10 @@
       "config":{
         "columns": ["close","high","low"],
         "function": "low",
-        "thresholds": [0.4],
-        "tolerance": 0.1,
+        "thresholds": [0.5],
+        "tolerance": 0.05,
         "horizon": 24,
-        "names": ["low_04_24"]
+        "names": ["low_05_24"]
       }
     }
   ],
@@ -125,36 +114,48 @@
   ],
 
   "train_features": [
-    "close_SMA_5","close_SMA_10","close_SMA_20","close_SMA_60","close_SMA_120",
-    "close_EMA_12","close_EMA_26",
+    "close_SMA_5","close_SMA_10","close_SMA_20","close_SMA_60",
     "close_RSI_14",
     "close_LINEARREG_SLOPE_10","close_LINEARREG_SLOPE_20","close_LINEARREG_SLOPE_60",
-    "close_MOM_10",
-    "high_low_close_ATR_14","close_STDDEV_20","close_STDDEV_60",
-    "close_BBANDS_20_upper","close_BBANDS_20_middle","close_BBANDS_20_lower",
-    "close_volume_OBV_1","volume_SMA_20"
+    "high_low_close_ATR_14",
+    "close_STDDEV_20","close_STDDEV_60"
   ],
 
-  "labels": ["high_04_24","low_04_24"],
+  "labels": ["high_05_24","low_05_24"],
 
   "algorithms": [
-    // Must match algorithms used in training
+    // Using TESTED Logistic Classifier from btcusdt_5m_staging_v2.jsonc
     {
-      "name":"lgbm",
-      "algo":"lgbm",
-      "params":{},
-      "train":{"num_leaves":31,"learning_rate":0.05,"n_estimators":300,"max_depth":-1}
+      "name":"lc",
+      "algo":"lc",
+      "params":{"is_scale":true},
+      "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":500}
     }
   ],
 
+  "base_asset": "BTC",
+  "quote_asset": "USDT",
+
+  "trade_model": {
+    "trader_binance": true,
+    "no_trades_only_data_processing": false,
+    "test_order_before_submit": true,            // Binance test order first
+    "simulate_order_execution": false,
+
+    "percentage_used_for_trade": 2.0,            // 2% of USDT balance per trade
+    "min_notional_usdt": 5.0,                    // Binance minimum (US$5)
+    "min_balance_usdt_for_percentage": 500.0,    // Below this, use min_notional
+    "limit_price_adjustment": 0.0                // +/-0% of last close
+  },
+
   // === SIGNALS ===============================================================
-  // STAGING: Use optimized thresholds from backtesting
+  // STAGING: Use TESTED thresholds from btcusdt_5m_staging_v2.jsonc
 
   "signal_sets": [
     {
       "generator":"combine",
       "config":{
-        "columns":["high_04_24_lgbm","low_04_24_lgbm"],
+        "columns":["high_05_24_lc","low_05_24_lc"],
         "names":"trade_score",
         "combine":"difference"
       }
@@ -165,9 +166,9 @@
         "columns":"trade_score",
         "names":["buy_signal","sell_signal"],
         "parameters":{
-          // STAGING: Use OPTIMIZED thresholds from simulate_model results
-          "buy_signal_threshold": 0.003,   // Should come from backtesting
-          "sell_signal_threshold": -0.003
+          // TESTED thresholds from btcusdt_5m_staging_v2.jsonc
+          "buy_signal_threshold": 0.0035,
+          "sell_signal_threshold": -0.0045
         }
       }
     }
@@ -189,33 +190,19 @@
         "buy_signal_column":"buy_signal",
         "sell_signal_column":"sell_signal"
       }
+    },
+    {
+      "generator":"trader_binance",
+      "config":{
+        "buy_signal_column":"buy_signal",
+        "sell_signal_column":"sell_signal",
+        "percentage_used_for_trade":2.0
+      }
     }
-
-    // STAGING: Uncomment for shadow mode (paper trading)
-    // {
-    //   "generator":"trader_binance",
-    //   "config":{
-    //     "buy_signal_column":"buy_signal",
-    //     "sell_signal_column":"sell_signal",
-    //     "percentage_used_for_trade":10.0,  // Start small in staging
-    //     "test_mode": true  // Paper trading mode
-    //   }
-    // }
-
-    // PRODUCTION: Uncomment for live trading (after shadow mode success)
-    // {
-    //   "generator":"trader_binance",
-    //   "config":{
-    //     "buy_signal_column":"buy_signal",
-    //     "sell_signal_column":"sell_signal",
-    //     "percentage_used_for_trade":20.0,
-    //     "test_mode": false  // LIVE TRADING
-    //   }
-    // }
   ],
 
   // === THRESHOLD OPTIMIZATION ================================================
-  // STAGING: NOT USED (thresholds already optimized in dev)
+  // STAGING: Using TESTED thresholds from btcusdt_5m_staging_v2.jsonc
 
   "simulate_model": {
     "data_start":0,
@@ -225,8 +212,8 @@
     "signal_generator":"threshold_rule",
     "buy_sell_equal":false,
     "grid":{
-      "buy_signal_threshold":[0.003],
-      "sell_signal_threshold":[-0.003]
+      "buy_signal_threshold":[0.002, 0.003, 0.004],
+      "sell_signal_threshold":[-0.002, -0.003, -0.004]
     }
   },
 
