@@ -750,3 +750,29 @@ azure-ml-train:
 	echo "Job submitted! Monitor at:"; \
 	echo "  GitHub Actions: https://github.com/$$(gh repo view --json owner,name -q '.owner.login + \"/\" + .name')/actions"; \
 	echo "  Azure ML Studio: https://ml.azure.com"
+
+# =============================================================================
+# Forex Trading (MetaApi + MT5)
+# =============================================================================
+
+forex-test:
+	@echo "Testing MetaApi MT5 connection..."
+	python3 service/adapters/metaapi_adapter.py
+
+forex-download-eurusd:
+	@echo "Downloading EURUSD 1h data..."
+	python -m scripts.download_forex --symbol EURUSD --timeframe 1h --days 365
+
+forex-download-all:
+	@echo "Downloading all major Forex pairs..."
+	python -m scripts.download_forex --all-pairs --timeframe 1h --days 365
+
+forex-pipeline-eurusd:
+	@echo "Running Forex EURUSD pipeline..."
+	python -m scripts.merge -c configs/forex_eurusd_1h.jsonc
+	python -m scripts.features -c configs/forex_eurusd_1h.jsonc
+	python -m scripts.labels -c configs/forex_eurusd_1h.jsonc
+	python -m scripts.train -c configs/forex_eurusd_1h.jsonc
+	python -m scripts.predict -c configs/forex_eurusd_1h.jsonc
+	python -m scripts.signals -c configs/forex_eurusd_1h.jsonc
+
