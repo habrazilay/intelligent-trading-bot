@@ -34,7 +34,7 @@ on:
         description: 'Keep container after completion (for debugging)'
         required: false
         type: boolean
-        default: false
+        default: true
       location:
         description: 'Azure region (leave empty for resource group default)'
         required: false
