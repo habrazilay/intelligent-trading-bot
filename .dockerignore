@@ -1,34 +1,80 @@
-# Git e editor
-.git
-.gitignore
-.vscode
-.idea
-*.swp
-.DS_Store
+# .dockerignore - Exclude unnecessary files from Docker image
 
-# Ambientes virtuais
-.venv
-venv
-env
-*venv
-*.egg-info
-/itb-env/
-
-# Cache Python / testes
-__pycache__/
-*.py[cod]
-.mypy_cache/
-.pytest_cache/
-
-# Dados grandes / gerados
-DATA_ITB_*
-
-# Arquivos de treino/relatório pesados (se quiser manter leve)
+# Data directories (mount as volumes instead)
+DATA_*/
+data/
 *.parquet
-*.parquet.orig
 *.csv
+
+# Model files (too large, mount as volume or download)
+MODELS*/
+*.pkl
+*.joblib
+*.h5
+*.pb
+
+# Git
+.git/
+.gitignore
+.github/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Logs
+logs/
 *.log
 
-# Infra que não precisa ir pra imagem runtime
-infra/
-docs/
+# Environment files
+.env
+.env.*
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing
+tests/
+test_*.py
+*_test.py
+
+# Notebooks
+*.ipynb
+notebooks/
+
+# Azure/GCP credentials
+credentials.json
+*.pem
+*.key
+
+# Misc
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
