@@ -11,7 +11,8 @@
         upload-1m upload-5m upload-1h staging-1m staging-5m shadow-1m shadow-5m \
         analyze-staging analyze-staging-high-capital analyze-staging-custom \
         gcp-setup-automated gcp-upload-bigquery gcp-automl gcp-lstm gcp-monitor \
-        verify-orderbook collect-orderbook
+        verify-orderbook collect-orderbook \
+        azure-ml-info azure-ml-train azure-ml-list-experiments azure-ml-list-jobs
 
 # Default target
 help:
@@ -24,7 +25,9 @@ help:
 	@echo "    make setup-azure      - Setup Azure infrastructure"
 	@echo "    make setup-gcp        - Setup GCP infrastructure"
 	@echo "    make setup-project    - Setup GitHub Project + labels"
-	@echo "    make infra-dev-apply  - Apply Terraform in dev"
+	@echo "    make infra-dev-init   - Terraform init (first time)"
+	@echo "    make infra-dev-plan   - Terraform plan (preview changes)"
+	@echo "    make infra-dev-apply  - Terraform apply (uses .env.dev secrets)"
 	@echo ""
 	@echo "  Docker:"
 	@echo "    make docker-build     - Build Docker image"
@@ -83,10 +86,28 @@ help:
 	@echo "    make gcp-lstm               - Run LSTM GPU training (CONFIG=...)"
 	@echo "    make gcp-monitor            - Monitor GCP costs"
 	@echo ""
+	@echo "  Azure ML:"
+	@echo "    make azure-ml-info          - Show Azure ML workspace info"
+	@echo "    make azure-ml-train         - Submit training job to Azure ML"
+	@echo "    make azure-ml-list-jobs     - List recent Azure ML jobs"
+	@echo "    make azure-ml-list-experiments - List Azure ML experiments"
+	@echo ""
+	@echo "  MLflow Tracking (Local → Azure ML):"
+	@echo "    make mlflow-train           - Train locally, log to Azure ML (FREE)"
+	@echo "    make mlflow-train SYMBOL=ETHUSDT FREQ=5m"
+	@echo "    make mlflow-list            - List experiments from Azure ML"
+	@echo ""
 	@echo "  Quick Commands (Easy!):"
 	@echo "    make dl SYMBOL=ETHUSDT FREQ=5m        - Download data"
 	@echo "    make run SYMBOL=ETHUSDT FREQ=5m       - Run full pipeline (conservative)"
 	@echo "    make run SYMBOL=SOL FREQ=5m STRATEGY=aggressive  - Run with strategy"
+	@echo ""
+	@echo "  Trade Monitoring (Testnet):"
+	@echo "    make monitor          - Start live monitoring (updates every 60s)"
+	@echo "    make monitor-once     - Take single snapshot"
+	@echo "    make analyze-trades   - Generate full analysis report"
+	@echo "    make trade-metrics    - Show trade metrics"
+	@echo "    make trade-insights   - Show trading insights"
 	@echo ""
 	@echo "  Utilities:"
 	@echo "    make validate         - Validate all configs"
@@ -119,6 +140,11 @@ IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
 TF_AZURE_PATH = infra/azure/terraform/envs/$(ENV)
 TF_GCP_PATH = infra/gcp/terraform/envs/$(ENV)
 
+# Azure ML
+AZURE_RESOURCE_GROUP ?= rg-itb-dev
+AZURE_ML_WORKSPACE ?= mlw-itb-dev
+AZURE_ML_COMPUTE ?= itb-training
+
 # =============================================================================
 # Setup
 # =============================================================================
@@ -140,9 +166,25 @@ setup-gcp:
 	cd $(TF_GCP_PATH) && terraform plan
 	@echo "Run 'cd $(TF_GCP_PATH) && terraform apply' to apply changes"
 
+infra-dev-init:
+	@echo ">> terraform init em infra/azure/terraform/envs/dev"
+	cd infra/azure/terraform/envs/dev && terraform init
+
+infra-dev-plan:
+	@echo ">> terraform plan em infra/azure/terraform/envs/dev"
+	@echo ">> Carregando secrets do .env.dev..."
+	@. .env.dev && \
+	 export TF_VAR_binance_api_key=$$BINANCE_API_KEY && \
+	 export TF_VAR_binance_api_secret=$$BINANCE_API_SECRET && \
+	 cd infra/azure/terraform/envs/dev && terraform plan
+
 infra-dev-apply:
 	@echo ">> terraform apply em infra/azure/terraform/envs/dev"
-	cd infra/azure/terraform/envs/dev && terraform apply
+	@echo ">> Carregando secrets do .env.dev..."
+	@. .env.dev && \
+	 export TF_VAR_binance_api_key=$$BINANCE_API_KEY && \
+	 export TF_VAR_binance_api_secret=$$BINANCE_API_SECRET && \
+	 cd infra/azure/terraform/envs/dev && terraform apply
 
 setup-project:
 	@echo ">> Setting up GitHub Project, labels, and sample issues"
@@ -591,3 +633,120 @@ gcp-workflow:
 	$(MAKE) gcp-monitor
 	@echo ""
 	@echo "Workflow complete!"
+
+# =============================================================================
+# Azure ML Operations
+# =============================================================================
+
+azure-ml-info:
+	@echo "════════════════════════════════════════════════════════════════"
+	@echo "  Azure ML Workspace Info"
+	@echo "════════════════════════════════════════════════════════════════"
+	@az ml workspace show \
+		--name $(AZURE_ML_WORKSPACE) \
+		--resource-group $(AZURE_RESOURCE_GROUP) \
+		--output table 2>/dev/null || echo "Workspace not found. Run 'make infra-dev-apply' first."
+
+azure-ml-list-experiments:
+	@echo "Listing Azure ML experiments..."
+	@az ml experiment list \
+		--workspace-name $(AZURE_ML_WORKSPACE) \
+		--resource-group $(AZURE_RESOURCE_GROUP) \
+		--output table
+
+azure-ml-list-jobs:
+	@echo "Listing recent Azure ML jobs..."
+	@az ml job list \
+		--workspace-name $(AZURE_ML_WORKSPACE) \
+		--resource-group $(AZURE_RESOURCE_GROUP) \
+		--max-results 10 \
+		--output table
+
+# =============================================================================
+# Trade Monitoring & Analysis (Futures Testnet)
+# =============================================================================
+
+monitor:
+	@echo "Starting trade monitor (testnet)..."
+	python -m scripts.trade_monitor --interval 60
+
+monitor-once:
+	@echo "Taking single snapshot..."
+	python -m scripts.trade_monitor --once
+
+analyze-trades:
+	@echo "Analyzing trade history..."
+	python -m scripts.trade_analyzer --report
+
+trade-metrics:
+	@echo "Trade metrics:"
+	python -m scripts.trade_analyzer --metrics
+
+trade-insights:
+	@echo "Trade insights:"
+	python -m scripts.trade_analyzer --insights
+
+optimize-thresholds:
+	@echo "Analyzing and recommending threshold optimizations..."
+	python -m scripts.threshold_optimizer --config base_conservative.jsonc
+
+optimize-apply:
+	@echo "Optimizing and applying new thresholds..."
+	python -m scripts.threshold_optimizer --config base_conservative.jsonc --apply
+
+optimize-continuous:
+	@echo "Starting continuous threshold optimization (every 30min)..."
+	python -m scripts.threshold_optimizer --config base_conservative.jsonc --apply --continuous --interval 30
+
+# =============================================================================
+# MLflow Tracking (Local training → Azure ML)
+# =============================================================================
+
+mlflow-train:
+	@echo "Training locally with MLflow tracking to Azure ML..."
+	@. .env.dev && python tools/train_with_mlflow.py \
+		--symbol $(or $(SYMBOL),BTCUSDT) \
+		--freq $(or $(FREQ),5m) \
+		--strategy $(or $(STRATEGY),conservative)
+
+mlflow-list:
+	@echo "Listing MLflow experiments from Azure ML..."
+	@. .env.dev && python tools/train_with_mlflow.py --list --strategy $(or $(STRATEGY),conservative)
+
+# =============================================================================
+# Azure ML Training
+# =============================================================================
+
+azure-ml-train:
+	@if [ -z "$(SYMBOL)" ] || [ -z "$(FREQ)" ]; then \
+		echo "╔════════════════════════════════════════════════════════════════╗"; \
+		echo "║  Azure ML Training                                              ║"; \
+		echo "╚════════════════════════════════════════════════════════════════╝"; \
+		echo ""; \
+		echo "Usage: make azure-ml-train SYMBOL=<symbol> FREQ=<freq> [STRATEGY=<strategy>]"; \
+		echo ""; \
+		echo "Examples:"; \
+		echo "  make azure-ml-train SYMBOL=BTCUSDT FREQ=5m"; \
+		echo "  make azure-ml-train SYMBOL=ETHUSDT FREQ=1h STRATEGY=aggressive"; \
+		echo ""; \
+		echo "Available Symbols: BTCUSDT, ETHUSDT, BNBUSDT, XRPUSDT"; \
+		echo "Available Frequencies: 1m, 5m, 1h"; \
+		echo "Available Strategies: conservative (default), aggressive, quick_profit"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@STRATEGY_VAL=$${STRATEGY:-conservative}; \
+	echo "Submitting Azure ML training job..."; \
+	echo "  Symbol:   $(SYMBOL)"; \
+	echo "  Freq:     $(FREQ)"; \
+	echo "  Strategy: $$STRATEGY_VAL"; \
+	echo "  Compute:  $(AZURE_ML_COMPUTE)"; \
+	gh workflow run train-azure-ml.yml \
+		-f symbol=$(SYMBOL) \
+		-f freq=$(FREQ) \
+		-f strategy=$$STRATEGY_VAL \
+		-f compute_cluster=$(AZURE_ML_COMPUTE); \
+	echo ""; \
+	echo "Job submitted! Monitor at:"; \
+	echo "  GitHub Actions: https://github.com/$$(gh repo view --json owner,name -q '.owner.login + \"/\" + .name')/actions"; \
+	echo "  Azure ML Studio: https://ml.azure.com"
