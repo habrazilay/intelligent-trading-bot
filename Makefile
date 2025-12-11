@@ -542,6 +542,21 @@ download-all:
 		python -m scripts.download_binance -c configs/$${symbol,,}_1m_dev.jsonc || true; \
 	done
 
+# Download missing data (DOGE 5m, DOGE 1m, SOL 1m) in background with nohup
+download-missing:
+	@echo "Starting downloads for missing data in background..."
+	@mkdir -p logs
+	nohup python -m scripts.download_binance -c configs/dogeusdt_5m_dev.jsonc > logs/download_dogeusdt_5m.log 2>&1 &
+	@echo "DOGE 5m started - log: logs/download_dogeusdt_5m.log"
+	nohup python -m scripts.download_binance -c configs/dogeusdt_1m_dev.jsonc > logs/download_dogeusdt_1m.log 2>&1 &
+	@echo "DOGE 1m started - log: logs/download_dogeusdt_1m.log"
+	nohup python -m scripts.download_binance -c configs/solusdt_1m_dev.jsonc > logs/download_solusdt_1m.log 2>&1 &
+	@echo "SOL 1m started - log: logs/download_solusdt_1m.log"
+	@echo ""
+	@echo "All downloads running in background!"
+	@echo "Monitor with: tail -f logs/download_*.log"
+	@echo "Check status: ps aux | grep download_binance"
+
 pipeline-all:
 	@echo "Running pipeline for all symbols..."
 	@for symbol in BTCUSDT ETHUSDT BNBUSDT SOLUSDT XRPUSDT; do \
