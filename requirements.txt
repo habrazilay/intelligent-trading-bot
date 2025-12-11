@@ -28,5 +28,6 @@ python-dotenv>=1.0.0
 google-cloud-bigquery>=3.0.0
 google-cloud-aiplatform>=1.38.0
 google-cloud-storage>=2.10.0
+grpcio-status<1.76.0  # Compatible with protobuf<5.0
 
 # seaborn  # if outputs with diagrams are used

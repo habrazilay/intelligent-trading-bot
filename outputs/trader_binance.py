@@ -1,5 +1,6 @@
 import math
 import asyncio
+import logging
 from datetime import datetime
 from decimal import Decimal
 
@@ -18,6 +19,8 @@ from binance.enums import (
     SIDE_BUY,
     SIDE_SELL,
 )
+
+log = logging.getLogger(__name__)
 
 from service.App import App
 from common.utils import now_timestamp, to_decimal, round_str, round_down_str
@@ -142,13 +145,17 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
 
     if signal_side == "BUY":
         print(f"===> BUY SIGNAL {signal}: ")
+        log.info("===> BUY SIGNAL %s", signal)
     elif signal_side == "SELL":
         print(f"<=== SELL SIGNAL: {signal}")
+        log.info("<=== SELL SIGNAL %s", signal)
     else:
         if close_price is not None:
             print(f"PRICE: {close_price:.2f}")
+            log.info("PRICE: %.2f", close_price)
         else:
             print("PRICE: n/a")
+            log.info("PRICE: n/a")
 
     # Update account balance etc. what is needed for trade
     await update_account_balance()

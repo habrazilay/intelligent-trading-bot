@@ -133,10 +133,13 @@ async def trader_mt5(df: pd.DataFrame, model: dict, config: dict, model_store: M
 
     if signal_side == "BUY":
         print(f"===> BUY SIGNAL {signal}: ")
+        log.info("===> BUY SIGNAL %s", signal)
     elif signal_side == "SELL":
         print(f"<=== SELL SIGNAL: {signal}")
+        log.info("<=== SELL SIGNAL %s", signal)
     else:
         print(f"PRICE: {close_price:.2f}")
+        log.info("PRICE: %.2f", close_price)
 
     # Update account balance etc. what is needed for trade
     # -----
