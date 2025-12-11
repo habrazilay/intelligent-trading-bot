@@ -30,16 +30,13 @@ on:
         required: true
         type: string
 
-env:
-  ACR_IMAGE: itbacr.azurecr.io/itb-bot
-
 jobs:
   labels:
     name: Generate Labels
     runs-on: ubuntu-latest
     environment: dev
     container:
-      image: itbacr.azurecr.io/itb-bot:dev-training
+      image: ${{ vars.ACR_LOGIN_SERVER }}/itb-bot:dev-training
       credentials:
         username: ${{ secrets.ACR_USERNAME }}
         password: ${{ secrets.ACR_PASSWORD }}
