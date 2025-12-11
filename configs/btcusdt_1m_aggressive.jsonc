@@ -1,0 +1,360 @@
+{
+  // ============================================================================
+  // BTCUSDT 1-Minute AGGRESSIVE Scalping Strategy
+  // ============================================================================
+  //
+  // STRATEGY OVERVIEW:
+  // - High-frequency scalping with 0.2% targets
+  // - Short holding periods (10-20 minutes average)
+  // - Dynamic TP/SL based on volatility regime
+  // - Increased trade frequency (30-50 trades/day target)
+  //
+  // KEY DIFFERENCES FROM CONSERVATIVE MODE:
+  // 1. Labels: 0.2% targets in 10 min (vs 0.5% in 60 min)
+  // 2. Thresholds: 0.01 (vs 0.003) - 3x more sensitive
+  // 3. Risk: Dynamic TP/SL with trailing stops
+  // 4. Features: Added microstructure signals (spread, regime)
+  //
+  // RISK MANAGEMENT:
+  // - Max daily loss: -3%
+  // - Circuit breaker: 5 consecutive losses
+  // - Trailing stops activated after 0.15% profit
+  // - Force exit after 30 minutes
+  //
+  // ============================================================================
+
+  // === GENERAL EXECUTION ======================================================
+
+  "train": true,
+  "venue": "binance",
+
+  // Credentials from .env (BINANCE_API_KEY / BINANCE_API_SECRET)
+  "api_key": "",
+  "api_secret": "",
+
+  // Telegram notifications (optional, from .env)
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+
+  // REUSE EXISTING DATA: Share data_folder with conservative mode to avoid re-download
+  "data_folder": "./DATA_ITB_1m",
+
+  "symbol": "BTCUSDT",
+
+  // REUSE: features.csv and data.csv (if compatible)
+  // NEW: matrix.csv (different labels), predictions, signals
+  "feature_file_name": "features_agressive.csv",          // Can reuse if same features
+  "merge_file_name": "data.csv",                // Can reuse (klines merge)
+  "matrix_file_name": "matrix_aggressive.csv",  // NEW - different labels
+  "predict_file_name": "predictions_aggressive.csv",  // NEW
+  "signal_file_name": "signals_aggressive.csv",       // NEW
+  "signal_models_file_name": "signal_models_aggressive",
+
+  "model_folder": "MODELS_AGGRESSIVE_V1",
+  "description": "BTCUSDT 1min AGGRESSIVE scalping strategy - 0.2% targets",
+  "freq": "1m",
+  "pandas_freq": "1min",
+  "time_column": "timestamp",
+
+  // === WINDOWS AND SIZES ======================================================
+
+  "label_horizon": 20,      // 20 min horizon (shorter for scalping)
+  "features_horizon": 60,   // 60 min lookback for features
+  "train_length": 259200,   // ~180 days of 1m data
+  "predict_length": 288,    // Keep last 288 rows updated
+  "append_overlap_records": 5,
+
+  // === DOWNLOAD AND MERGE =====================================================
+
+  "data_sources": [
+    { "folder": "BTCUSDT", "file": "klines", "column_prefix": "" }
+  ],
+
+  "download_start": "2024-06-01",  // 6 months of data
+  "download_end": null,
+
+  "merge_interpolate": false,
+
+  // === FEATURES ==============================================================
+  //
+  // AGGRESSIVE MODE FEATURES:
+  // - Ultra-short momentum (3, 5 candles)
+  // - Microstructure (spread analysis)
+  // - Volatility regime detection
+  // - Standard indicators for context
+  //
+  // ============================================================================
+
+  "feature_sets": [
+    // === Short-term Moving Averages ===
+    {
+      "generator": "talib",
+      "config": {
+        "columns": ["close"],
+        "functions": ["SMA"],
+        "windows": [3, 5, 10, 20, 60]
+      }
+    },
+
+    // === Ultra-Short Momentum (NEW) ===
+    {
+      "generator": "talib",
+      "config": {
+        "columns": ["close"],
+        "functions": ["LINEARREG_SLOPE"],
+        "windows": [3, 5, 10, 20]
+      }
+    },
+
+    // === RSI (standard) ===
+    {
+      "generator": "talib",
+      "config": {
+        "columns": ["close"],
+        "functions": ["RSI"],
+        "windows": [14]
+      }
+    },
+
+    // === Volatility (ATR + STDDEV) ===
+    {
+      "generator": "talib",
+      "config": {
+        "columns": ["high", "low", "close"],
+        "functions": ["ATR"],
+        "windows": [14]
+      }
+    },
+    {
+      "generator": "talib",
+      "config": {
+        "columns": ["close"],
+        "functions": ["STDDEV"],
+        "windows": [10, 20]
+      }
+    },
+
+    // === Microstructure Features (NEW) ===
+    // High-Low spread as proxy for volatility/liquidity
+    {
+      "generator": "common.gen_labels_aggressive:add_spread_features",
+      "config": {
+        "windows": [3, 5, 10]
+      }
+    },
+
+    // === Regime Detection (NEW) ===
+    // Volatility regime classification
+    {
+      "generator": "common.gen_labels_aggressive:add_regime_features",
+      "config": {
+        "atr_column": "high_low_close_ATR_14"
+      }
+    }
+  ],
+
+  // === LABELS =================================================================
+  //
+  // AGGRESSIVE SCALPING LABELS:
+  // - Target: 0.15%, 0.20%, 0.25% (realistic for 1m)
+  // - Horizon: 10 candles (10 minutes)
+  // - Tolerance: 0.05% (prevents labeling noise)
+  //
+  // RATIONALE:
+  // - 0.5% in 60 min is too ambitious for scalping
+  // - 0.2% in 10 min is achievable and measurable
+  // - Tolerance prevents false positives from bid-ask bounce
+  //
+  // ============================================================================
+
+  "label_sets": [
+    // High labels (upward moves)
+    {
+      "generator": "common.gen_labels_aggressive:generate_labels_aggressive",
+      "config": {
+        "columns": ["close", "high", "low"],
+        "function": "high",
+        "thresholds": [0.15, 0.20, 0.25],
+        "tolerance": 0.05,
+        "horizon": 10,
+        "names": ["high_015_10", "high_020_10", "high_025_10"]
+      }
+    },
+
+    // Low labels (downward moves)
+    {
+      "generator": "common.gen_labels_aggressive:generate_labels_aggressive",
+      "config": {
+        "columns": ["close", "high", "low"],
+        "function": "low",
+        "thresholds": [0.15, 0.20, 0.25],
+        "tolerance": 0.05,
+        "horizon": 10,
+        "names": ["low_015_10", "low_020_10", "low_025_10"]
+      }
+    }
+  ],
+
+  // === TRAINING ==============================================================
+
+  "train_feature_sets": [
+    {
+      "generator": "train_features",
+      "config": {}
+    }
+  ],
+
+  "train_features": [
+    // Moving averages
+    "close_SMA_3", "close_SMA_5", "close_SMA_10", "close_SMA_20", "close_SMA_60",
+
+    // Ultra-short momentum (NEW)
+    "close_LINEARREG_SLOPE_3", "close_LINEARREG_SLOPE_5",
+
+    // Standard momentum
+    "close_LINEARREG_SLOPE_10", "close_LINEARREG_SLOPE_20",
+
+    // RSI
+    "close_RSI_14",
+
+    // Volatility
+    "high_low_close_ATR_14", "close_STDDEV_10", "close_STDDEV_20",
+
+    // Microstructure (NEW)
+    "spread_pct_3", "spread_pct_5", "spread_pct_10",
+
+    // Regime (NEW)
+    "vol_regime"
+  ],
+
+  // PRIMARY LABELS: Focus on 0.20% (most realistic)
+  "labels": ["high_020_10", "low_020_10"],
+
+  "algorithms": [
+    {
+      "name": "lgbm",  // ⚠️ NO UNDERSCORES! System uses "_" as separator
+      "algo": "lgbm",
+      "params": {},
+      "train": {
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "n_estimators": 300,
+        "max_depth": -1,
+        "min_child_samples": 20,    // Prevent overfitting
+        "subsample": 0.8,            // Row sampling
+        "colsample_bytree": 0.8      // Feature sampling
+      }
+    }
+  ],
+
+  // === SIGNALS ===============================================================
+  //
+  // AGGRESSIVE THRESHOLDS:
+  // - Buy/Sell threshold: 0.01 (vs 0.003 conservative)
+  // - Rationale: 3x more sensitive = 3x more trades
+  // - Risk managed by TP/SL, not by signal filtering
+  //
+  // ============================================================================
+
+  "signal_sets": [
+    // Combine predictions into single score
+    {
+      "generator": "combine",
+      "config": {
+        "columns": ["high_020_10_lgbm", "low_020_10_lgbm"],
+        "names": "trade_score_aggressive",
+        "combine": "difference"
+      }
+    },
+
+    // Convert score to buy/sell signals (AGGRESSIVE THRESHOLDS)
+    {
+      "generator": "threshold_rule",
+      "config": {
+        "columns": "trade_score_aggressive",
+        "names": ["buy_signal_aggressive", "sell_signal_aggressive"],
+        "parameters": {
+          "buy_signal_threshold": 0.01,   // 3x more sensitive than conservative
+          "sell_signal_threshold": -0.01
+        }
+      }
+    }
+  ],
+
+  // === OUTPUTS ===============================================================
+
+  "output_sets": [
+    // Score notifications
+    {
+      "generator": "score_notification_model",
+      "config": {
+        "score_notification": true,
+        "score_column_names": ["trade_score_aggressive"]
+      }
+    },
+
+    // Trade simulation (for backtesting)
+    {
+      "generator": "trader_simulation",
+      "config": {
+        "buy_signal_column": "buy_signal_aggressive",
+        "sell_signal_column": "sell_signal_aggressive",
+
+        // RISK MANAGEMENT CONFIG (NEW)
+        "risk_config": {
+          "base_take_profit_pct": 0.25,     // 0.25% TP
+          "base_stop_loss_pct": 0.20,       // 0.20% SL
+          "max_hold_time_minutes": 30,      // Force exit after 30 min
+          "enable_trailing_stop": true,     // Trail stops in profit
+          "max_daily_loss_pct": -3.0,       // Circuit breaker
+          "max_consecutive_losses": 5
+        }
+      }
+    }
+
+    // LIVE TRADING (DISABLED - uncomment after shadow mode validation)
+    // {
+    //   "generator": "trader_binance",
+    //   "config": {
+    //     "buy_signal_column": "buy_signal_aggressive",
+    //     "sell_signal_column": "sell_signal_aggressive",
+    //     "percentage_used_for_trade": 10.0,  // Start with 10% of capital
+    //     "risk_config": {
+    //       "base_take_profit_pct": 0.25,
+    //       "base_stop_loss_pct": 0.20,
+    //       "max_hold_time_minutes": 30,
+    //       "enable_trailing_stop": true
+    //     }
+    //   }
+    // }
+  ],
+
+  // === THRESHOLD OPTIMIZATION ================================================
+
+  "simulate_model": {
+    "data_start": 0,
+    "data_end": null,
+    "direction": "long",
+    "topn_to_store": 10,
+    "signal_generator": "threshold_rule",
+    "buy_sell_equal": false,
+
+    // Grid search for optimal aggressive thresholds
+    "grid": {
+      "buy_signal_threshold": [0.008, 0.010, 0.012, 0.015],
+      "sell_signal_threshold": [-0.008, -0.010, -0.012, -0.015]
+    }
+  },
+
+  // === ROLLING PREDICT =======================================================
+
+  "rolling_predict": {
+    "data_start": "2024-11-01 00:00:00",
+    "data_end": null,
+    "prediction_start": null,
+    "prediction_size": 10080,   // 1 week
+    "prediction_steps": 4,
+    "use_multiprocessing": true,
+    "max_workers": 6
+  }
+}

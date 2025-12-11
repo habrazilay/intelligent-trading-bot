@@ -1,0 +1,29 @@
+# requirements-minimal.txt
+# Para SHADOW MODE (predições em produção)
+# Imagem Docker: ~400MB
+
+# Core dependencies
+numpy==2.1.*
+pandas==2.*
+pyarrow  # For parquet files
+protobuf<5.0.0,>=3.20.0  # Fix for AttributeError: 'MessageFactory' with lightgbm
+
+# Scheduling & CLI
+apscheduler
+click
+tqdm
+python-dotenv>=1.0.0
+
+# Binance API
+python-binance>=1.0.32
+
+# Feature generation (apenas TA-Lib)
+# TA-Lib é essencial para features, mas requer compilação
+# Será instalado no Dockerfile via apt-get + pip wrapper
+
+# ML Models (apenas para INFERÊNCIA, não treino)
+scikit-learn==1.6.*
+lightgbm==4.*
+
+# Telegram notifications (opcional)
+requests

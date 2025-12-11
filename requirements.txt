@@ -2,6 +2,7 @@ numpy==2.1.*  # version limited by tensorflow and numba
 pandas==2.*  # version might be important for parsing timestamps
 numba  # For highlow label generator
 pyarrow  # If parquet is used. Alternatively fastparquet
+protobuf<5.0.0,>=3.20.0  # Fix for AttributeError: 'MessageFactory' with lightgbm/tensorflow
 
 apscheduler
 click
@@ -22,5 +23,11 @@ scikit-learn==1.6.*
 lightgbm==4.*
 tensorflow==2.19.*
 python-dotenv>=1.0.0
+
+# Google Cloud Platform (for cloud ML training)
+google-cloud-bigquery>=3.0.0
+google-cloud-aiplatform>=1.38.0
+google-cloud-storage>=2.10.0
+grpcio-status<1.76.0  # Compatible with protobuf<5.0
 
 # seaborn  # if outputs with diagrams are used

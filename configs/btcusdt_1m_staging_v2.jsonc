@@ -177,13 +177,45 @@
     "trader_binance": true,
 
     "no_trades_only_data_processing": false,
-    "test_order_before_submit": true,
+    "test_order_before_submit": true,       // LIVE TRADE: desabilitado para executar ordem real diretamente
     "simulate_order_execution": false,
+
+    // Shadow mode: bypass balance-based status check to allow order creation
+    // When true, allows BUY orders even if BTC value > USDT (status="BOUGHT")
+    // Set to true for testing with mixed balances
+    "shadow_mode": true,
+
+    // Force real trade: when true, shadow_mode will execute real orders (not just test)
+    // Use with caution! This will place real orders on Binance
+    "force_real_trade": false,
 
     "percentage_used_for_trade": 2.0,       // 2% do saldo de USDT
     "min_notional_usdt": 5.0,               // Binance não aceita menos que ~US$5 por ordem
     "min_balance_usdt_for_percentage": 500.0,  // abaixo disso, ignora porcentagem e usa min_notional como referência
-    "limit_price_adjustment": 0.002    // 0.2% pra cima/baixo    
+    "limit_price_adjustment": 0.002    // 0.2% pra cima/baixo
+  },
+
+  // === RISK MANAGEMENT =============================================
+
+  "risk_management": {
+    // Stop-Loss: fecha posição se perda exceder esse percentual
+    "stop_loss_percent": 2.0,
+
+    // Take-Profit: fecha posição se lucro exceder esse percentual
+    "take_profit_percent": 3.0,
+
+    // Trailing Stop (opcional): se definido, ativa após trailing_stop_activation % de lucro
+    // e fecha se preço cair trailing_stop_percent % do pico
+    // "trailing_stop_percent": 1.0,
+    // "trailing_stop_activation": 1.5,
+
+    // Circuit Breaker: pausa trading após perdas consecutivas
+    "circuit_breaker": {
+      "max_consecutive_losses": 3,     // Pausa após 3 perdas seguidas
+      "cooldown_minutes": 60,          // Tempo de pausa (1 hora)
+      "max_daily_losses": 5,           // Máximo de perdas por dia
+      "max_daily_loss_percent": 10.0   // Máximo de perda diária em %
+    }
   },
 
   "base_asset": "BTC",
@@ -199,13 +231,13 @@
     //     "score_column_names":["trade_score"]
     //   }
     // },
-    // {
-    //   "generator":"trader_simulation",
-    //   "config":{
-    //     "buy_signal_column":"buy_signal",
-    //     "sell_signal_column":"sell_signal"
-    //   }
-    // },
+    {
+      "generator":"trader_simulation",
+      "config":{
+        "buy_signal_column":"buy_signal",
+        "sell_signal_column":"sell_signal"
+      }
+    },
     {
       "generator":"trader_binance",
       "config":{
@@ -213,7 +245,7 @@
         "sell_signal_column":"sell_signal",
         "percentage_used_for_trade":2.0
       }
-    }
+    },
   ],
 
   // === OTIMIZAÇÃO DE THRESHOLDS ===========================================

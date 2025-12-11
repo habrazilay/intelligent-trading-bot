@@ -1,0 +1,25 @@
+# requirements-full.txt
+# Para DESENVOLVIMENTO LOCAL e TREINO AVANÇADO
+# Inclui: train + TensorFlow + Google Cloud
+# Tamanho: ~1.1GB
+
+# Include training requirements
+-r requirements-train.txt
+
+# Deep Learning (OPCIONAL - apenas para LSTM experiments)
+tensorflow==2.19.*
+
+# Google Cloud Platform (OPCIONAL - apenas para GCP ML training)
+google-cloud-bigquery>=3.0.0
+google-cloud-aiplatform>=1.38.0
+google-cloud-storage>=2.10.0
+
+# Advanced feature generation (OPCIONAL)
+# tsfresh  # Requires Python 3.8 only
+
+# Yahoo Finance downloader (OPCIONAL)
+# yfinance
+# curl-cffi
+
+# MetaTrader5 (OPCIONAL - Windows only)
+# MetaTrader5>=5.0.4874; sys_platform == 'win32'

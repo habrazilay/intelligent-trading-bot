@@ -9,7 +9,9 @@
         download train predict pipeline clean validate-configs \
         infra-dev-apply image-dev dev-1m dev-5m analyze-1m \
         upload-1m upload-5m upload-1h staging-1m staging-5m shadow-1m shadow-5m \
-        analyze-staging analyze-staging-high-capital analyze-staging-custom
+        analyze-staging analyze-staging-high-capital analyze-staging-custom \
+        gcp-setup-automated gcp-upload-bigquery gcp-automl gcp-lstm gcp-monitor \
+        verify-orderbook collect-orderbook
 
 # Default target
 help:
@@ -37,14 +39,24 @@ help:
 	@echo "    make train            - Train models"
 	@echo "    make predict          - Run predictions"
 	@echo "    make signals          - Generate signals"
-	@echo "    make pipeline         - Run full pipeline"
+	@echo "    make pipeline         - Run full pipeline (legacy)"
+	@echo "    make pipeline-generic - Run generic pipeline (BASE_CONFIG=... SYMBOL=... FREQ=...)"
 	@echo ""
-	@echo "  Dev Pipelines:"
+	@echo "  Quick Pipelines (New!):"
+	@echo "    make conservative-btc-5m  - Conservative strategy (Azure)"
+	@echo "    make conservative-eth-5m  - Conservative strategy (Azure)"
+	@echo "    make aggressive-sol-5m    - Aggressive strategy (GCP)"
+	@echo "    make aggressive-bnb-5m    - Aggressive strategy (GCP)"
+	@echo "    make quick-btc-1m         - Quick profit scalping (1m)"
+	@echo "    make quick-eth-1m         - Quick profit scalping (1m)"
+	@echo ""
+	@echo "  Dev Pipelines (Legacy):"
 	@echo "    make dev-1m           - Run dev pipeline 1m"
 	@echo "    make dev-5m           - Run dev pipeline 5m"
 	@echo ""
 	@echo "  Analysis:"
-	@echo "    make analyze-1m       - Run analyze_btcusdt_1m.py"
+	@echo "    make analyze SYMBOL=BTCUSDT FREQ=5m  - Analyze data and get recommendations"
+	@echo "    make analyze-1m                      - Legacy: analyze_btcusdt_1m.py"
 	@echo ""
 	@echo "  Upload to Azure:"
 	@echo "    make upload-1m        - Upload BTCUSDT 1m to Azure Files"
@@ -60,9 +72,26 @@ help:
 	@echo "    make analyze-staging-high-capital - Analyze with $10K capital"
 	@echo "    make analyze-staging-custom     - Custom: LOG_FILE=... CAPITAL=... RISK=..."
 	@echo ""
+	@echo "  Order Flow Collection:"
+	@echo "    make verify-orderbook       - Verify collected orderbook data"
+	@echo "    make collect-orderbook      - Start 7-day orderbook collection"
+	@echo ""
+	@echo "  GCP Cloud ML:"
+	@echo "    make gcp-setup-automated    - Automated GCP setup (15 min)"
+	@echo "    make gcp-upload-bigquery    - Upload data to BigQuery (CONFIG=...)"
+	@echo "    make gcp-automl             - Run AutoML training (CONFIG=..., BUDGET=1)"
+	@echo "    make gcp-lstm               - Run LSTM GPU training (CONFIG=...)"
+	@echo "    make gcp-monitor            - Monitor GCP costs"
+	@echo ""
+	@echo "  Quick Commands (Easy!):"
+	@echo "    make dl SYMBOL=ETHUSDT FREQ=5m        - Download data"
+	@echo "    make run SYMBOL=ETHUSDT FREQ=5m       - Run full pipeline (conservative)"
+	@echo "    make run SYMBOL=SOL FREQ=5m STRATEGY=aggressive  - Run with strategy"
+	@echo ""
 	@echo "  Utilities:"
 	@echo "    make validate         - Validate all configs"
 	@echo "    make clean            - Clean generated files"
+	@echo "    make clean-cache      - Clean Python cache (fix import errors)"
 	@echo "    make test             - Run tests"
 	@echo ""
 
@@ -70,8 +99,14 @@ help:
 # Configuration
 # =============================================================================
 
-CONFIG ?= configs/btcusdt_1m_dev.jsonc
+# New generic config system (recommended)
+BASE_CONFIG ?= configs/base_conservative.jsonc
 SYMBOL ?= BTCUSDT
+FREQ ?= 5m
+
+# Legacy: specific config files (deprecated, use BASE_CONFIG + SYMBOL + FREQ instead)
+CONFIG ?= configs/btcusdt_1m_dev.jsonc
+
 ENV ?= dev
 VERSION ?= $(shell date +v%Y-%m-%d)
 
@@ -142,17 +177,22 @@ download:
 	@echo "Downloading data for $(SYMBOL)..."
 	python -m scripts.download_binance -c $(CONFIG)
 
+# Generic download (new)
+download-generic:
+	@echo "Downloading $(SYMBOL) $(FREQ)..."
+	python -m scripts.download_binance -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+
 merge:
 	@echo "Merging data..."
-	python -m scripts.merge_new -c $(CONFIG)
+	python -m scripts.merge -c $(CONFIG)
 
 features:
 	@echo "Generating features..."
-	python -m scripts.features_new -c $(CONFIG)
+	python -m scripts.features -c $(CONFIG)
 
 labels:
 	@echo "Generating labels..."
-	python -m scripts.labels_new -c $(CONFIG)
+	python -m scripts.labels -c $(CONFIG)
 
 train:
 	@echo "Training models..."
@@ -169,8 +209,111 @@ signals:
 pipeline: merge features labels train predict signals
 	@echo "Full pipeline complete!"
 
+# Generic pipeline with BASE_CONFIG (New!)
+# Usage: make pipeline-generic BASE_CONFIG=configs/base_conservative.jsonc SYMBOL=BTCUSDT FREQ=5m
+pipeline-generic:
+	@echo "Running pipeline with:"
+	@echo "  Config: $(BASE_CONFIG)"
+	@echo "  Symbol: $(SYMBOL)"
+	@echo "  Freq:   $(FREQ)"
+	python -m scripts.download_binance -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.merge -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.features -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.labels -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.train -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.predict -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.signals -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.simulate -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	@echo "Generic pipeline complete!"
+
 # =============================================================================
-# Dev Pipelines
+# Quick Commands (User-friendly)
+# =============================================================================
+
+# Download with symbol/freq
+# Usage: make dl SYMBOL=ETHUSDT FREQ=5m
+dl:
+	@if [ -z "$(SYMBOL)" ] || [ -z "$(FREQ)" ]; then \
+		echo "╔════════════════════════════════════════════════════════════════╗"; \
+		echo "║  Download Binance Data                                         ║"; \
+		echo "╚════════════════════════════════════════════════════════════════╝"; \
+		echo ""; \
+		echo "Usage: make dl SYMBOL=<symbol> FREQ=<freq>"; \
+		echo ""; \
+		echo "Examples:"; \
+		echo "  make dl SYMBOL=ETHUSDT FREQ=5m"; \
+		echo "  make dl SYMBOL=BTCUSDT FREQ=1m"; \
+		echo "  make dl SYMBOL=SOLUSDT FREQ=5m"; \
+		echo ""; \
+		echo "Available Symbols: BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT"; \
+		echo "Available Frequencies: 1m, 5m, 15m, 1h"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@echo "Downloading $(SYMBOL) $(FREQ)..."
+	@python -m scripts.download_binance -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+
+# Full pipeline with symbol/freq
+# Usage: make run SYMBOL=ETHUSDT FREQ=5m
+run:
+	@if [ -z "$(SYMBOL)" ] || [ -z "$(FREQ)" ]; then \
+		echo "╔════════════════════════════════════════════════════════════════╗"; \
+		echo "║  Run Full Pipeline                                             ║"; \
+		echo "╚════════════════════════════════════════════════════════════════╝"; \
+		echo ""; \
+		echo "Usage: make run SYMBOL=<symbol> FREQ=<freq> [STRATEGY=<strategy>]"; \
+		echo ""; \
+		echo "Examples:"; \
+		echo "  make run SYMBOL=ETHUSDT FREQ=5m"; \
+		echo "  make run SYMBOL=ETHUSDT FREQ=5m STRATEGY=aggressive"; \
+		echo "  make run SYMBOL=SOLUSDT FREQ=5m STRATEGY=quick"; \
+		echo ""; \
+		echo "Available Symbols: BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT"; \
+		echo "Available Frequencies: 1m, 5m, 15m, 1h"; \
+		echo "Available Strategies: conservative (default), aggressive, staging, quick"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@# Determine config based on STRATEGY
+	@if [ "$(STRATEGY)" = "aggressive" ]; then \
+		CONFIG=configs/base_aggressive.jsonc; \
+	elif [ "$(STRATEGY)" = "staging" ]; then \
+		CONFIG=configs/base_staging.jsonc; \
+	elif [ "$(STRATEGY)" = "quick" ]; then \
+		CONFIG=configs/base_quick_profit.jsonc; \
+	else \
+		CONFIG=configs/base_conservative.jsonc; \
+	fi; \
+	echo "Running pipeline with $$CONFIG for $(SYMBOL) $(FREQ)..."; \
+	$(MAKE) pipeline-generic BASE_CONFIG=$$CONFIG SYMBOL=$(SYMBOL) FREQ=$(FREQ)
+
+# =============================================================================
+# Quick Pipelines (New Generic System)
+# =============================================================================
+
+# Conservative (Azure baseline)
+conservative-btc-5m:
+	$(MAKE) pipeline-generic BASE_CONFIG=configs/base_conservative.jsonc SYMBOL=BTCUSDT FREQ=5m
+
+conservative-eth-5m:
+	$(MAKE) pipeline-generic BASE_CONFIG=configs/base_conservative.jsonc SYMBOL=ETHUSDT FREQ=5m
+
+# Aggressive (GCP advanced)
+aggressive-sol-5m:
+	$(MAKE) pipeline-generic BASE_CONFIG=configs/base_aggressive.jsonc SYMBOL=SOLUSDT FREQ=5m
+
+aggressive-bnb-5m:
+	$(MAKE) pipeline-generic BASE_CONFIG=configs/base_aggressive.jsonc SYMBOL=BNBUSDT FREQ=5m
+
+# Quick Profit (Scalping)
+quick-btc-1m:
+	$(MAKE) pipeline-generic BASE_CONFIG=configs/base_quick_profit.jsonc SYMBOL=BTCUSDT FREQ=1m
+
+quick-eth-1m:
+	$(MAKE) pipeline-generic BASE_CONFIG=configs/base_quick_profit.jsonc SYMBOL=ETHUSDT FREQ=1m
+
+# =============================================================================
+# Dev Pipelines (Legacy)
 # =============================================================================
 
 dev-1m:
@@ -201,6 +344,28 @@ signals-1m-lgbm:
 # Analysis
 # =============================================================================
 
+# Generic analyze (New!)
+analyze:
+	@if [ -z "$(SYMBOL)" ] || [ -z "$(FREQ)" ]; then \
+		echo ""; \
+		echo "ERROR: SYMBOL and FREQ are required!"; \
+		echo ""; \
+		echo "Usage: make analyze SYMBOL=<symbol> FREQ=<freq> [DAYS=<days>]"; \
+		echo ""; \
+		echo "Examples:"; \
+		echo "  make analyze SYMBOL=BTCUSDT FREQ=5m"; \
+		echo "  make analyze SYMBOL=ETHUSDT FREQ=1m DAYS=30"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@DAYS=$${DAYS:-90}; \
+	echo ">> Analyzing $(SYMBOL) $(FREQ) data (last $$DAYS days)..."; \
+	python -m scripts.analyze_data \
+	  --symbol $(SYMBOL) \
+	  --freq $(FREQ) \
+	  --days $$DAYS
+
+# Legacy analyze
 analyze-1m:
 	@echo ">> analyze_btcusdt_1m.py (local)"
 	python my_tests/analyze_btcusdt_1m.py \
@@ -273,6 +438,14 @@ clean:
 	find . -type f -name ".DS_Store" -delete
 	@echo "Clean complete!"
 
+clean-cache:
+	@echo "Cleaning Python cache and bytecode..."
+	find . -type f -name "*.pyc" -delete
+	find . -type f -name "*.pyo" -delete
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+	@echo "Python cache cleaned! Try running your command again."
+
 test:
 	@echo "Running tests..."
 	python -m pytest tests/ -v || echo "No tests found"
@@ -322,3 +495,99 @@ pipeline-all:
 		echo "═══════════════════════════════════════════════"; \
 		$(MAKE) pipeline CONFIG=configs/$${symbol,,}_1m_dev.jsonc || true; \
 	done
+
+# =============================================================================
+# Order Flow Collection
+# =============================================================================
+
+verify-orderbook:
+	@echo "Verifying orderbook data collection..."
+	python scripts/verify_orderbook_data.py
+
+collect-orderbook:
+	@echo "Starting 7-day orderbook collection..."
+	@echo "This will run in background with nohup"
+	@echo "Monitor with: tail -f collector_7days.log"
+	nohup python scripts/collect_orderbook.py \
+		--symbol BTCUSDT \
+		--duration 7d \
+		--save-interval 6h \
+		> collector_7days.log 2>&1 &
+	@echo "Collection started! PID: $$!"
+	@echo "Monitor: tail -f collector_7days.log"
+	@echo "Check status: ps aux | grep collect_orderbook"
+
+# =============================================================================
+# GCP Cloud ML Operations
+# =============================================================================
+
+# Budget for AutoML (in hours)
+BUDGET ?= 1
+
+gcp-setup-automated:
+	@echo "Running automated GCP setup..."
+	@echo "This will:"
+	@echo "  1. Install gcloud CLI (if needed)"
+	@echo "  2. Authenticate your account"
+	@echo "  3. Create GCP project"
+	@echo "  4. Link billing account (~$$970 USD credits)"
+	@echo "  5. Enable APIs (Vertex AI, BigQuery, Compute)"
+	@echo "  6. Install Python dependencies"
+	@echo ""
+	bash scripts/setup_gcp.sh
+
+gcp-upload-bigquery:
+	@echo "Uploading data to BigQuery..."
+	@if [ -z "$(CONFIG)" ]; then \
+		echo "Error: CONFIG not specified. Usage: make gcp-upload-bigquery CONFIG=configs/btcusdt_5m_aggressive.jsonc"; \
+		exit 1; \
+	fi
+	python scripts/upload_to_bigquery.py -c $(CONFIG)
+
+gcp-automl:
+	@echo "Running GCP AutoML training..."
+	@echo "Budget: $(BUDGET) hour(s) (~$$$(shell echo $$(($(BUDGET) * 5))) USD)"
+	@if [ -z "$(CONFIG)" ]; then \
+		echo "Error: CONFIG not specified. Usage: make gcp-automl CONFIG=configs/btcusdt_5m_orderflow.jsonc BUDGET=1"; \
+		exit 1; \
+	fi
+	python scripts/gcp_automl_train.py -c $(CONFIG) --budget $(BUDGET)
+
+gcp-lstm:
+	@echo "Running LSTM GPU training on GCP..."
+	@echo "Estimated cost: $$10-30 (2-4 hours on T4 GPU)"
+	@if [ -z "$(CONFIG)" ]; then \
+		echo "Error: CONFIG not specified. Usage: make gcp-lstm CONFIG=configs/btcusdt_5m_orderflow.jsonc"; \
+		exit 1; \
+	fi
+	python scripts/lstm_gpu_train.py -c $(CONFIG)
+
+gcp-monitor:
+	@echo "Monitoring GCP costs..."
+	python scripts/cloud_cost_monitor.py
+
+gcp-monitor-continuous:
+	@echo "Starting continuous cost monitoring (every hour)..."
+	python scripts/cloud_cost_monitor.py --monitor --interval 3600
+
+# Quick workflow for GCP ML
+gcp-workflow:
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo "  GCP ML Workflow - Upload + AutoML"
+	@echo "═══════════════════════════════════════════════════════════════"
+	@if [ -z "$(CONFIG)" ]; then \
+		echo "Error: CONFIG not specified."; \
+		echo "Usage: make gcp-workflow CONFIG=configs/btcusdt_5m_orderflow.jsonc BUDGET=1"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "Step 1: Upload to BigQuery..."
+	$(MAKE) gcp-upload-bigquery CONFIG=$(CONFIG)
+	@echo ""
+	@echo "Step 2: Run AutoML ($(BUDGET)h budget)..."
+	$(MAKE) gcp-automl CONFIG=$(CONFIG) BUDGET=$(BUDGET)
+	@echo ""
+	@echo "Step 3: Check costs..."
+	$(MAKE) gcp-monitor
+	@echo ""
+	@echo "Workflow complete!"

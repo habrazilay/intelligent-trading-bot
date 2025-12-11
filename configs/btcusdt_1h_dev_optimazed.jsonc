@@ -44,7 +44,7 @@
     { "folder": "BTCUSDT", "file": "klines", "column_prefix": "" }
   ],
 
-  "download_start": "2019-01-01",
+  "download_start": "2022-01-01",
   "download_end":   null,
 
 

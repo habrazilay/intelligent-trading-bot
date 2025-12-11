@@ -1,4 +1,4 @@
-name: Run labels_new only on Azure ACI (ACR + FileShare)
+name: Step - Train
 
 on:
   workflow_dispatch:
@@ -21,7 +21,6 @@ on:
         description: "Image tag"
         required: true
         type: string
-
 env:
   ACR_LOGIN_SERVER: itbacr.azurecr.io
   ACR_REPOSITORY: itb-bot
@@ -33,7 +32,7 @@ env:
   DATA_MOUNT_PATH: /app/DATA_ITB_1m
 
 jobs:
-  labels_only:
+  train_only:
     runs-on: ubuntu-latest
     env:
       CONFIG_PATH: ${{ inputs.config_path || github.event.inputs.config_path }}
@@ -43,18 +42,18 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Run labels_new in Azure Container Instance
+      - name: Run train in Azure Container Instance
         run: |
-          CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-labels-only
+          CONTAINER_NAME=${{ env.AZURE_CONTAINER_PREFIX }}-train-only
 
           echo "CONFIG_PATH=$CONFIG_PATH"
-          echo "🧹 Deleting previous labels-only container (if exists)..."
+          echo "🧹 Deleting previous train-only container (if exists)..."
           az container delete \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
-          echo "🔄 Creating labels-only container $CONTAINER_NAME with image $DOCKER_IMAGE..."
+          echo "🔄 Creating train-only container $CONTAINER_NAME with image $DOCKER_IMAGE..."
           az container create \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
@@ -71,9 +70,9 @@ jobs:
             --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
             --azure-file-volume-mount-path "${{ env.DATA_MOUNT_PATH }}" \
             --no-wait \
-            --command-line "python -m scripts.labels_new -c $CONFIG_PATH"
+            --command-line "python -m scripts.train -c $CONFIG_PATH"
 
-          echo "⏳ Waiting for labels-only container final state..."
+          echo "⏳ Waiting for train-only container final state..."
           for i in {1..60}; do
             STATE=$(az container show \
               --name "$CONTAINER_NAME" \
@@ -86,7 +85,7 @@ jobs:
             sleep 5
           done
 
-          echo "📜 labels-only container logs:"
+          echo "📜 train-only container logs:"
           az container logs \
             --name "$CONTAINER_NAME" \
             --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"

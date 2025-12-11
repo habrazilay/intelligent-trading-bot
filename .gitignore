@@ -262,4 +262,4 @@ cython_debug/
 *.tfstate
 *.tfstate.*
 crash.log
-*.terraform.lock.hcl
+*.terraform.lock.hcllogs/

@@ -1,0 +1,243 @@
+{
+  // ============================================================================
+  // BASE QUICK PROFIT CONFIG
+  // ============================================================================
+  // Strategy: Fast scalping for quick profits (0.2-0.3%)
+  // Models: LightGBM optimized for speed
+  // Risk: High (very low thresholds, high frequency trading)
+  // Use: python -m scripts.train --config configs/base_quick_profit.jsonc --symbol BTCUSDT --freq 1m
+  // ============================================================================
+
+  // === EXECUTION ==============================================================
+
+  "train": true,
+  "venue": "binance",
+
+  "api_key": "",
+  "api_secret": "",
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+
+  // === PATHS (NO HARDCODED SYMBOL/FREQ) ======================================
+
+  "data_folder": "./DATA_ITB_{freq}",
+  "symbol": "{symbol}",
+
+  "merge_file_name":   "data.csv",
+  "feature_file_name": "features_quick.csv",
+  "matrix_file_name":  "matrix_quick.csv",
+  "predict_file_name": "predictions_quick.csv",
+  "signal_file_name":  "signals_quick.csv",
+  "signal_models_file_name": "signal_models_quick",
+
+  "model_folder": "MODELS_QUICK_PROFIT",
+  "description": "Quick profit scalping strategy",
+  "freq": "{freq}",
+  "pandas_freq": "{pandas_freq}",
+  "time_column": "timestamp",
+
+  // === WINDOWS AND SIZES ======================================================
+
+  "label_horizon":   12,     // QUICK: Very short horizon (1h for 5m, 12min for 1m)
+  "features_horizon": 12,
+  "train_length":    105120,
+  "predict_length":  288,
+  "append_overlap_records": 5,
+
+  // === DOWNLOAD AND MERGE ====================================================
+
+  "data_sources": [
+    { "folder": "{symbol}", "file": "klines", "column_prefix": "" }
+  ],
+
+  "download_start": "2022-01-01",
+  "download_end":   null,
+  "merge_interpolate": false,
+
+  // === FEATURES ==============================================================
+  // QUICK: Focus on fast-moving indicators (short windows)
+
+  "feature_sets": [
+    // Fast Moving Averages
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["SMA"],"windows":[3,5,10,20]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["EMA"],"windows":[3,5,12]}},
+
+    // Fast Momentum
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["RSI"],"windows":[7,14]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["LINEARREG_SLOPE"],"windows":[3,5,10]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["MOM"],"windows":[3,5]}},
+    { "generator":"talib",
+      "config":{"columns":["high","low","close"],"functions":["CCI"],"windows":[10]}},
+
+    // Fast Volatility
+    { "generator":"talib",
+      "config":{"columns":["high","low","close"],"functions":["ATR"],"windows":[7,14]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["STDDEV"],"windows":[10,20]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["BBANDS"],"windows":[10]}},  // Faster Bollinger
+
+    // Volume (critical for scalping)
+    { "generator":"talib",
+      "config":{"columns":["close","volume"],"functions":["OBV"],"windows":[1]}},
+    { "generator":"talib",
+      "config":{"columns":["volume"],"functions":["SMA"],"windows":[5,10]}},
+    { "generator":"talib",
+      "config":{"columns":["high","low","close","volume"],"functions":["MFI"],"windows":[10]}},
+
+    // Fast MACD
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["MACD"],"windows":[1]}}
+  ],
+
+  // === LABELS ================================================================
+  // QUICK: Very low thresholds (0.2-0.3% = scalping range)
+
+  "label_sets": [
+    {
+      "generator":"highlow2",
+      "config":{
+        "columns": ["close","high","low"],
+        "function": "high",
+        "thresholds": [0.25],      // QUICK: 0.25% quick profit
+        "tolerance": 0.05,         // Very tight tolerance
+        "horizon": 12,
+        "names": ["high_025_12"]
+      }
+    },
+    {
+      "generator":"highlow2",
+      "config":{
+        "columns": ["close","high","low"],
+        "function": "low",
+        "thresholds": [0.25],
+        "tolerance": 0.05,
+        "horizon": 12,
+        "names": ["low_025_12"]
+      }
+    }
+  ],
+
+  // === TRAINING ==============================================================
+  // QUICK: Only LGBM (fastest, best for high frequency)
+
+  "train_feature_sets": [
+    {
+      "generator": "train_features",
+      "config": {}
+    }
+  ],
+
+  "train_features": [
+    "close_SMA_3","close_SMA_5","close_SMA_10","close_SMA_20",
+    "close_EMA_3","close_EMA_5","close_EMA_12",
+    "close_RSI_7","close_RSI_14",
+    "close_LINEARREG_SLOPE_3","close_LINEARREG_SLOPE_5","close_LINEARREG_SLOPE_10",
+    "close_MOM_3","close_MOM_5",
+    "high_low_close_CCI_10",
+    "high_low_close_ATR_7","high_low_close_ATR_14",
+    "close_STDDEV_10","close_STDDEV_20",
+    "close_BBANDS_10_upper","close_BBANDS_10_middle","close_BBANDS_10_lower",
+    "close_volume_OBV_1","volume_SMA_5","volume_SMA_10",
+    "high_low_close_volume_MFI_10",
+    "close_MACD_1_macd","close_MACD_1_macdsignal","close_MACD_1_macdhist"
+  ],
+
+  "labels": ["high_025_12","low_025_12"],
+
+  "algorithms": [
+    // LightGBM optimized for fast scalping
+    {
+      "name":"lgbm",
+      "algo":"lgbm",
+      "params":{},
+      "train":{
+        "num_leaves":31,           // Moderate complexity (speed vs accuracy)
+        "learning_rate":0.05,
+        "n_estimators":300,
+        "max_depth":6,
+        "min_child_samples":10,    // Lower = more sensitive
+        "subsample":0.9,
+        "colsample_bytree":0.9
+      }
+    }
+  ],
+
+  // === SIGNALS ===============================================================
+  // QUICK: Very low thresholds for high frequency
+
+  "signal_sets": [
+    {
+      "generator":"combine",
+      "config":{
+        "columns":["high_025_12_lgbm","low_025_12_lgbm"],
+        "names":"trade_score",
+        "combine":"difference"
+      }
+    },
+    {
+      "generator":"threshold_rule",
+      "config":{
+        "columns":"trade_score",
+        "names":["buy_signal","sell_signal"],
+        "parameters":{
+          "buy_signal_threshold": 0.0008,   // VERY LOW: high frequency
+          "sell_signal_threshold": -0.0008
+        }
+      }
+    }
+  ],
+
+  // === OUTPUTS ===============================================================
+
+  "output_sets": [
+    {
+      "generator":"score_notification_model",
+      "config":{
+        "score_notification":true,
+        "score_column_names":["trade_score"]
+      }
+    },
+    {
+      "generator":"trader_simulation",
+      "config":{
+        "buy_signal_column":"buy_signal",
+        "sell_signal_column":"sell_signal"
+      }
+    }
+  ],
+
+  // === THRESHOLD OPTIMIZATION ================================================
+  // CRITICAL: Find optimal thresholds for scalping
+
+  "simulate_model": {
+    "data_start":0,
+    "data_end":null,
+    "direction":"long",
+    "topn_to_store":20,           // Store more results (more variability in scalping)
+    "signal_generator":"threshold_rule",
+    "buy_sell_equal":false,
+    "grid":{
+      // QUICK: Test very low thresholds (0.05% - 0.2%)
+      "buy_signal_threshold":[0.0005, 0.0008, 0.001, 0.0012, 0.0015, 0.002],
+      "sell_signal_threshold":[-0.0005, -0.0008, -0.001, -0.0012, -0.0015, -0.002]
+    }
+  },
+
+  // === ROLLING PREDICT =======================================================
+
+  "rolling_predict": {
+    "data_start": "2024-11-17 00:00:00",
+    "data_end":   null,
+    "prediction_start": null,
+    "prediction_size": 10080,
+    "prediction_steps": 4,
+    "use_multiprocessing": true,
+    "max_workers": 6
+  }
+}

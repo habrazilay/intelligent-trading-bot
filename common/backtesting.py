@@ -7,62 +7,75 @@ Backtesting and trade performance using trade simulation
 
 def simulated_trade_performance(df, buy_signal_column, sell_signal_column, price_column):
     """
-    The function simulates trades over the time by buying and selling the asset
-    according to the specified buy/sell signals and price. Essentially, it assumes
-    the existence of some initial amount, then it moves forward in time by finding
-    next buy/sell signal and accordingly buying/selling the asset using the current
-    price. At the end, it finds how much it earned by comparing with the initial amount.
+    Simulates trading by executing buy/sell signals and calculating profit from complete trade pairs.
 
-    It returns short and long performance as a number of metrics collected during
-    one simulation pass.
+    LONG strategy: BUY at signal → SELL at signal → profit = sell_price - buy_price
+    SHORT strategy: SELL at signal → BUY at signal → profit = sell_price - buy_price
+
+    Returns performance metrics for long and short strategies.
     """
-    is_buy_mode = True
-
+    # LONG strategy state
+    long_position = None  # (index, buy_price)
+    long_trades = []  # List of completed trades: (buy_idx, buy_price, sell_idx, sell_price, profit, profit_pct)
     long_profit = 0
     long_profit_percent = 0
-    long_transactions = 0
     long_profitable = 0
-    longs = list()  # Where we buy
 
+    # SHORT strategy state
+    short_position = None  # (index, sell_price)
+    short_trades = []  # List of completed trades
     short_profit = 0
     short_profit_percent = 0
-    short_transactions = 0
     short_profitable = 0
-    shorts = list()  # Where we sell
 
-    # The order of columns is important for itertuples
+    # Process all signals
     df = df[[sell_signal_column, buy_signal_column, price_column]]
     for (index, sell_signal, buy_signal, price) in df.itertuples(name=None):
         if not price or pd.isnull(price):
             continue
-        if is_buy_mode:
-            # Check if minimum price
-            if buy_signal:
-                previous_price = shorts[-1][2] if len(shorts) > 0 else 0.0
-                profit = (previous_price - price) if previous_price > 0 else 0.0
-                profit_percent = 100.0 * profit / previous_price if previous_price > 0 else 0.0
-                short_profit += profit
-                short_profit_percent += profit_percent
-                short_transactions += 1
-                if profit > 0:
-                    short_profitable += 1
-                shorts.append((index, previous_price, price, profit, profit_percent))  # Bought
-                is_buy_mode = False
-        else:
-            # Check if maximum price
-            if sell_signal:
-                previous_price = longs[-1][2] if len(longs) > 0 else 0.0
-                profit = (price - previous_price) if previous_price > 0 else 0.0
-                profit_percent = 100.0 * profit / previous_price if previous_price > 0 else 0.0
-                long_profit += profit
-                long_profit_percent += profit_percent
-                long_transactions += 1
-                if profit > 0:
-                    long_profitable += 1
-                longs.append((index, previous_price, price, profit, profit_percent))  # Sold
-                is_buy_mode = True
 
-    # Performance of buy at low price and sell at high price
+        # === LONG STRATEGY: Buy first, then Sell ===
+        if buy_signal and long_position is None:
+            # Open LONG position
+            long_position = (index, price)
+
+        elif sell_signal and long_position is not None:
+            # Close LONG position
+            buy_idx, buy_price = long_position
+            sell_price = price
+            profit = sell_price - buy_price
+            profit_pct = 100.0 * profit / buy_price
+
+            long_trades.append((buy_idx, buy_price, index, sell_price, profit, profit_pct))
+            long_profit += profit
+            long_profit_percent += profit_pct
+            if profit > 0:
+                long_profitable += 1
+
+            long_position = None  # Close position
+
+        # === SHORT STRATEGY: Sell first, then Buy ===
+        if sell_signal and short_position is None:
+            # Open SHORT position (sell borrowed asset)
+            short_position = (index, price)
+
+        elif buy_signal and short_position is not None:
+            # Close SHORT position (buy back asset)
+            sell_idx, sell_price = short_position
+            buy_price = price
+            profit = sell_price - buy_price  # Profit from selling high, buying low
+            profit_pct = 100.0 * profit / sell_price
+
+            short_trades.append((sell_idx, sell_price, index, buy_price, profit, profit_pct))
+            short_profit += profit
+            short_profit_percent += profit_pct
+            if profit > 0:
+                short_profitable += 1
+
+            short_position = None  # Close position
+
+    # Build performance metrics
+    long_transactions = len(long_trades)
     long_performance = {
         "#transactions": long_transactions,
         "profit": round(long_profit, 2),
@@ -73,11 +86,9 @@ def simulated_trade_performance(df, buy_signal_column, sell_signal_column, price
 
         "profit/T": round(long_profit / long_transactions, 2) if long_transactions else 0.0,
         "%profit/T": round(long_profit_percent / long_transactions, 1) if long_transactions else 0.0,
-
-        #"transactions": longs,  # Sell transactions
     }
 
-    # Performance of sell at high price and buy at low price
+    short_transactions = len(short_trades)
     short_performance = {
         "#transactions": short_transactions,
         "profit": round(short_profit, 2),
@@ -88,30 +99,24 @@ def simulated_trade_performance(df, buy_signal_column, sell_signal_column, price
 
         "profit/T": round(short_profit / short_transactions, 2) if short_transactions else 0.0,
         "%profit/T": round(short_profit_percent / short_transactions, 1) if short_transactions else 0.0,
-
-        #"transactions": shorts,  # Buy transactions
     }
 
-    profit = long_profit + short_profit
-    profit_percent = long_profit_percent + short_profit_percent
-    transaction_no = long_transactions + short_transactions
-    profitable = (long_profitable + short_profitable) / transaction_no if transaction_no else 0.0
-    #minutes_in_month = 1440 * 30.5
+    # Combined performance
+    total_profit = long_profit + short_profit
+    total_profit_percent = long_profit_percent + short_profit_percent
+    total_transactions = long_transactions + short_transactions
+    total_profitable = long_profitable + short_profitable
+
     performance = {
-        "#transactions": transaction_no,
-        "profit": profit,
-        "%profit": profit_percent,
+        "#transactions": total_transactions,
+        "profit": round(total_profit, 2),
+        "%profit": round(total_profit_percent, 1),
 
-        "profitable": profitable,
-        "profitable_percent": round(100.0 * profitable / transaction_no, 1) if transaction_no else 0.0,
+        "#profitable": total_profitable,
+        "%profitable": round(100.0 * total_profitable / total_transactions, 1) if total_transactions else 0.0,
 
-        "profit/T": round(profit / transaction_no, 2) if transaction_no else 0.0,
-        "%profit/T": round(profit_percent / transaction_no, 1) if transaction_no else 0.0,
-
-        #"transactions": transactions,
-
-        #"profit_per_month": profit / (len(df) / minutes_in_month),
-        #"transactions_per_month": transaction_no / (len(df) / minutes_in_month),
+        "profit/T": round(total_profit / total_transactions, 2) if total_transactions else 0.0,
+        "%profit/T": round(total_profit_percent / total_transactions, 1) if total_transactions else 0.0,
     }
 
     return performance, long_performance, short_performance

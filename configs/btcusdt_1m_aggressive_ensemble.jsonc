@@ -1,0 +1,289 @@
+{
+  // ============================================================================
+  // BTCUSDT 1m AGGRESSIVE - Ensemble: LC + LGBM
+  // ============================================================================
+  //
+  // STRATEGY:
+  // - Train both Logistic Regression (baseline) and LightGBM (production)
+  // - Compare performance to validate LGBM superiority
+  // - Use LC for interpretability, LGBM for accuracy
+  //
+  // ============================================================================
+
+  "train": true,
+  "venue": "binance",
+  "api_key": "",
+  "api_secret": "",
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+
+  "data_folder": "./DATA_ITB_1m",  // REUSE data from aggressive mode!
+  "symbol": "BTCUSDT",
+  "feature_file_name": "features_agressive.csv",  // Same features as aggressive
+  "merge_file_name": "data.csv",
+  "matrix_file_name": "matrix_aggressive.csv",    // Same labels as aggressive
+  "predict_file_name": "predictions_ensemble.csv",
+  "signal_file_name": "signals_ensemble.csv",
+  "signal_models_file_name": "signal_models_ensemble",
+
+  "model_folder": "MODELS_ENSEMBLE",
+  "description": "BTCUSDT 1m aggressive - LC (baseline) + LGBM (production) comparison",
+  "freq": "1m",
+  "pandas_freq": "1min",
+  "time_column": "timestamp",
+
+  // === WINDOWS ================================================================
+
+  "label_horizon": 20,
+  "features_horizon": 60,
+  "train_length": 259200,
+  "predict_length": 288,
+  "append_overlap_records": 5,
+
+  // === DATA SOURCES ===========================================================
+
+  "data_sources": [
+    { "folder": "BTCUSDT", "file": "klines", "column_prefix": "" }
+  ],
+
+  "download_start": "2024-06-01",
+  "download_end": null,
+  "merge_interpolate": false,
+
+  // === FEATURES ===============================================================
+
+  "feature_sets": [
+    {"generator": "talib", "config": {"columns": ["close"], "functions": ["SMA"], "windows": [3, 5, 10, 20, 60]}},
+    {"generator": "talib", "config": {"columns": ["close"], "functions": ["LINEARREG_SLOPE"], "windows": [3, 5, 10, 20]}},
+    {"generator": "talib", "config": {"columns": ["close"], "functions": ["RSI"], "windows": [14]}},
+    {"generator": "talib", "config": {"columns": ["high", "low", "close"], "functions": ["ATR"], "windows": [14]}},
+    {"generator": "talib", "config": {"columns": ["close"], "functions": ["STDDEV"], "windows": [10, 20]}},
+    {"generator": "common.gen_labels_aggressive:add_spread_features", "config": {"windows": [3, 5, 10]}},
+    {"generator": "common.gen_labels_aggressive:add_regime_features", "config": {"atr_column": "high_low_close_ATR_14"}}
+  ],
+
+  // === LABELS =================================================================
+
+  "label_sets": [
+    {
+      "generator": "common.gen_labels_aggressive:generate_labels_aggressive",
+      "config": {
+        "columns": ["close", "high", "low"],
+        "function": "high",
+        "thresholds": [0.20],
+        "tolerance": 0.05,
+        "horizon": 10,
+        "names": ["high_020_10"]
+      }
+    },
+    {
+      "generator": "common.gen_labels_aggressive:generate_labels_aggressive",
+      "config": {
+        "columns": ["close", "high", "low"],
+        "function": "low",
+        "thresholds": [0.20],
+        "tolerance": 0.05,
+        "horizon": 10,
+        "names": ["low_020_10"]
+      }
+    }
+  ],
+
+  // === TRAINING ===============================================================
+
+  "train_feature_sets": [
+    {"generator": "train_features", "config": {}}
+  ],
+
+  "train_features": [
+    "close_SMA_3", "close_SMA_5", "close_SMA_10", "close_SMA_20", "close_SMA_60",
+    "close_LINEARREG_SLOPE_3", "close_LINEARREG_SLOPE_5",
+    "close_LINEARREG_SLOPE_10", "close_LINEARREG_SLOPE_20",
+    "close_RSI_14",
+    "high_low_close_ATR_14", "close_STDDEV_10", "close_STDDEV_20",
+    "spread_pct_3", "spread_pct_5", "spread_pct_10",
+    "vol_regime"
+  ],
+
+  "labels": ["high_020_10", "low_020_10"],
+
+  // ============================================================================
+  // ALGORITHMS: LC (baseline) + LGBM (production)
+  // ============================================================================
+
+  "algorithms": [
+    // 1. Logistic Regression (BASELINE)
+    // - Fast training (~30 seconds)
+    // - Good interpretability (coefficients)
+    // - Linear decision boundary
+    // - Needs feature scaling
+    {
+      "name": "lc",  // NO UNDERSCORES! System uses "_" as separator
+      "algo": "lc",
+      "params": {"is_scale": true},  // IMPORTANT: LC requires scaling!
+      "train": {
+        "penalty": "l2",               // L2 regularization (Ridge)
+        "C": 1.0,                      // Regularization strength (lower = stronger)
+        "solver": "sag",               // Fast solver for large datasets
+        "max_iter": 100,               // Max iterations
+        "class_weight": "balanced"     // Handle imbalanced labels
+      }
+    },
+
+    // 2. LightGBM (PRODUCTION)
+    // - Slower training (~5-10 min)
+    // - Best accuracy for tabular data
+    // - Captures non-linear interactions
+    // - No scaling needed
+    {
+      "name": "lgbm",  // NO UNDERSCORES! System uses "_" as separator
+      "algo": "lgbm",
+      "params": {},  // No scaling needed!
+      "train": {
+        "num_leaves": 31,              // Tree complexity (2^depth - 1)
+        "learning_rate": 0.05,         // Lower = more conservative
+        "n_estimators": 300,           // Number of boosting rounds
+        "max_depth": -1,               // No limit (auto-optimized)
+        "min_child_samples": 20,       // Min samples per leaf (prevents overfit)
+        "subsample": 0.8,              // Row sampling (80% per tree)
+        "colsample_bytree": 0.8,       // Feature sampling (80% per tree)
+        "reg_alpha": 0.1,              // L1 regularization
+        "reg_lambda": 0.1,             // L2 regularization
+        "class_weight": "balanced"     // Handle imbalanced labels
+      }
+    }
+  ],
+
+  // === SIGNALS ================================================================
+  //
+  // Generate signals from BOTH models for comparison
+  //
+  // ============================================================================
+
+  "signal_sets": [
+    // --- LC (Baseline) Signals ---
+    {
+      "generator": "combine",
+      "config": {
+        "columns": ["high_020_10_lc", "low_020_10_lc"],
+        "names": "trade_score_lc",
+        "combine": "difference"
+      }
+    },
+    {
+      "generator": "threshold_rule",
+      "config": {
+        "columns": "trade_score_lc",
+        "names": ["buy_signal_lc", "sell_signal_lc"],
+        "parameters": {
+          "buy_signal_threshold": 0.01,
+          "sell_signal_threshold": -0.01
+        }
+      }
+    },
+
+    // --- LGBM (Production) Signals ---
+    {
+      "generator": "combine",
+      "config": {
+        "columns": ["high_020_10_lgbm", "low_020_10_lgbm"],
+        "names": "trade_score_lgbm",
+        "combine": "difference"
+      }
+    },
+    {
+      "generator": "threshold_rule",
+      "config": {
+        "columns": "trade_score_lgbm",
+        "names": ["buy_signal_lgbm", "sell_signal_lgbm"],
+        "parameters": {
+          "buy_signal_threshold": 0.01,
+          "sell_signal_threshold": -0.01
+        }
+      }
+    },
+
+    // --- ENSEMBLE: Average of Both Models (OPTIONAL) ---
+    // Uncomment to create ensemble that averages LC + LGBM predictions
+    // {
+    //   "generator": "combine",
+    //   "config": {
+    //     "columns": ["trade_score_lc", "trade_score_lgbm"],
+    //     "names": "trade_score_ensemble",
+    //     "combine": "average"
+    //   }
+    // },
+    // {
+    //   "generator": "threshold_rule",
+    //   "config": {
+    //     "columns": "trade_score_ensemble",
+    //     "names": ["buy_signal_ensemble", "sell_signal_ensemble"],
+    //     "parameters": {
+    //       "buy_signal_threshold": 0.01,
+    //       "sell_signal_threshold": -0.01
+    //     }
+    //   }
+    // }
+  ],
+
+  // === OUTPUTS ================================================================
+  //
+  // Run simulations for BOTH models to compare performance
+  //
+  // ============================================================================
+
+  "output_sets": [
+    {
+      "generator": "score_notification_model",
+      "config": {
+        "score_notification": true,
+        "score_column_names": ["trade_score_lc", "trade_score_lgbm"]
+      }
+    },
+
+    // Simulation for LC (baseline)
+    {
+      "generator": "trader_simulation",
+      "config": {
+        "buy_signal_column": "buy_signal_lc",
+        "sell_signal_column": "sell_signal_lc"
+      }
+    },
+
+    // Simulation for LGBM (production)
+    {
+      "generator": "trader_simulation",
+      "config": {
+        "buy_signal_column": "buy_signal_lgbm",
+        "sell_signal_column": "sell_signal_lgbm"
+      }
+    }
+  ],
+
+  // === THRESHOLD OPTIMIZATION =================================================
+
+  "simulate_model": {
+    "data_start": 0,
+    "data_end": null,
+    "direction": "long",
+    "topn_to_store": 10,
+    "signal_generator": "threshold_rule",
+    "buy_sell_equal": false,
+    "grid": {
+      "buy_signal_threshold": [0.008, 0.010, 0.012, 0.015],
+      "sell_signal_threshold": [-0.008, -0.010, -0.012, -0.015]
+    }
+  },
+
+  // === ROLLING PREDICT ========================================================
+
+  "rolling_predict": {
+    "data_start": "2024-11-01 00:00:00",
+    "data_end": null,
+    "prediction_start": null,
+    "prediction_size": 10080,
+    "prediction_steps": 4,
+    "use_multiprocessing": true,
+    "max_workers": 6
+  }
+}

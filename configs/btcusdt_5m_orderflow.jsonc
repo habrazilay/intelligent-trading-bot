@@ -1,0 +1,269 @@
+{
+  // ============================================================================
+  // BTCUSDT 5-Minute Aggressive Trading with Order Flow Features
+  // ============================================================================
+  //
+  // This config combines:
+  // 1. Traditional technical indicators (SMA, RSI, ATR) - 17 features
+  // 2. **NEW** Order flow features from L2 order book - 19 features
+  // 3. Regime and spread features - 4 features
+  //
+  // Total: 40 features (vs 17 in baseline)
+  //
+  // Order flow features are expected to provide +5-10% win rate improvement
+  // by capturing buying/selling pressure BEFORE price moves.
+  //
+  // Expected results:
+  // - Baseline (no order flow): 50.9% win rate, -7.9% profit
+  // - With order flow: 55-60% win rate, +10-20% profit
+  //
+  // Usage:
+  //   1. Collect order book data first:
+  //      python scripts/collect_orderbook.py --symbol BTCUSDT --duration 7d --save-interval 6h
+  //
+  //   2. Run full pipeline:
+  //      python -m scripts.features -c configs/btcusdt_5m_orderflow.jsonc --symbol BTCUSDT --freq 5m
+  //      python -m scripts.labels -c configs/btcusdt_5m_orderflow.jsonc --symbol BTCUSDT --freq 5m
+  //      python -m scripts.train -c configs/btcusdt_5m_orderflow.jsonc --symbol BTCUSDT --freq 5m
+  //      python -m scripts.simulate -c configs/btcusdt_5m_orderflow.jsonc --symbol BTCUSDT --freq 5m
+  // ============================================================================
+
+  // ============================================================================
+  // DATA CONFIGURATION
+  // ============================================================================
+
+  "exchange": "binance",
+  "symbol": "BTCUSDT",
+  "data_folder": "./DATA_ITB_5m",  // Reuse existing 5m data
+  "freq": "5m",
+
+  "start_date": "2022-01-01 00:00:00",
+  "end_date": "2025-12-31 23:59:59",
+
+  "data_sources": {
+    "source": "binance",
+    "file_path": "${data_folder}/klines.parquet"
+  },
+
+  // ============================================================================
+  // ORDER BOOK DATA COLLECTION (Optional)
+  // ============================================================================
+  //
+  // Configuration for collect_orderbook.py script
+  // Usage: python scripts/collect_orderbook.py -c configs/btcusdt_5m_orderflow.jsonc
+  //
+  "orderbook_collection": {
+    "duration": "7d",        // How long to collect (7 days for full backtest)
+    "save_interval": "6h"    // Save to disk every 6 hours
+  },
+
+  // ============================================================================
+  // LABELS - AGGRESSIVE SCALPING TARGETS
+  // ============================================================================
+  //
+  // Target: 0.4% profit in 20 minutes (4 candles @ 5m)
+  // More realistic than 1m (fewer noise trades)
+  //
+
+  "labels": ["high_040_4", "low_040_4"],
+
+  "label_sets": [
+    {
+      "generator": "gen_labels_aggressive",
+      "config": {
+        "horizons": [4],         // 4 bars = 20 minutes
+        "thresholds": [0.40],    // 0.4% price movement
+        "tolerance": 0.05,       // ±0.05% tolerance
+        "functions": ["high", "low"]
+      }
+    }
+  ],
+
+  // ============================================================================
+  // FEATURES - TECHNICAL + ORDER FLOW
+  // ============================================================================
+
+  "train_features": [
+    // Traditional technical indicators (17 features)
+    "close_SMA_3", "close_SMA_6", "close_SMA_12", "close_SMA_24", "close_SMA_48",
+    "close_LINEARREG_SLOPE_3", "close_LINEARREG_SLOPE_6",
+    "close_LINEARREG_SLOPE_12", "close_LINEARREG_SLOPE_24",
+    "close_RSI_14",
+    "high_low_close_ATR_14",
+    "close_STDDEV_12", "close_STDDEV_24",
+    "spread_pct_3", "spread_pct_6", "spread_pct_12",
+    "vol_regime",
+
+    // **NEW** Order flow features (19 features)
+    "imbalance_5",          // Bid-ask imbalance at depth 5
+    "imbalance_10",         // Bid-ask imbalance at depth 10
+    "imbalance_20",         // Bid-ask imbalance at depth 20
+    "bid_pressure",         // Order book pressure on bid side
+    "ask_pressure",         // Order book pressure on ask side
+    "bid_wall_count",       // Number of large bid orders
+    "bid_wall_ratio",       // Ratio of wall volume to total
+    "bid_max_wall",         // Largest bid order size
+    "ask_wall_count",       // Number of large ask orders
+    "ask_wall_ratio",       // Ratio of wall volume to total
+    "ask_max_wall",         // Largest ask order size
+    "effective_spread",     // Effective bid-ask spread
+    "level1_imbalance",     // Best bid vs best ask imbalance
+    "bid_volume_std",       // Bid volume standard deviation
+    "bid_volume_skew",      // Bid volume skewness
+    "ask_volume_std",       // Ask volume standard deviation
+    "ask_volume_skew",      // Ask volume skewness
+    "total_bid_depth",      // Total bid volume in book
+    "total_ask_depth"       // Total ask volume in book
+  ],
+
+  "feature_sets": [
+    // Technical indicators
+    {
+      "generator": "talib",
+      "config": {
+        "functions": ["SMA"],
+        "columns": ["close"],
+        "windows": [3, 6, 12, 24, 48]  // 15min, 30min, 1h, 2h, 4h
+      }
+    },
+    {
+      "generator": "talib",
+      "config": {
+        "functions": ["LINEARREG_SLOPE"],
+        "columns": ["close"],
+        "windows": [3, 6, 12, 24]
+      }
+    },
+    {
+      "generator": "talib",
+      "config": {
+        "functions": ["RSI"],
+        "columns": ["close"],
+        "windows": [14]
+      }
+    },
+    {
+      "generator": "talib",
+      "config": {
+        "functions": ["ATR"],
+        "columns": ["high", "low", "close"],
+        "windows": [14]
+      }
+    },
+    {
+      "generator": "talib",
+      "config": {
+        "functions": ["STDDEV"],
+        "columns": ["close"],
+        "windows": [12, 24]
+      }
+    },
+
+    // Regime and spread features
+    {
+      "generator": "gen_labels_aggressive",
+      "function": "add_regime_features",
+      "config": {
+        "atr_window": 14,
+        "percentiles": [33, 67]
+      }
+    },
+    {
+      "generator": "gen_labels_aggressive",
+      "function": "add_spread_features",
+      "config": {
+        "windows": [3, 6, 12]
+      }
+    },
+
+    // **NEW** Order flow features
+    {
+      "generator": "gen_features_orderflow",
+      "config": {
+        "orderbook_pattern": "DATA_ORDERBOOK/BTCUSDT_orderbook_*.parquet",
+        "depths": [5, 10, 20],
+        "freq": "5T"  // Must match OHLCV frequency (5 minutes)
+      }
+    }
+  ],
+
+  // ============================================================================
+  // MODEL TRAINING - LIGHTGBM
+  // ============================================================================
+
+  "algorithms": [
+    {
+      "name": "lgbm",
+      "algo": "lgbm",
+      "score_type": "score",
+      "train": {
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "n_estimators": 300,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "min_child_samples": 20,
+        "reg_alpha": 0.1,
+        "reg_lambda": 1.0,
+        "objective": "binary",
+        "metric": "binary_logloss",
+        "verbose": -1
+      },
+      "predict": {
+        "threshold": 0.01
+      }
+    }
+  ],
+
+  // ============================================================================
+  // TRAIN/TEST SPLIT
+  // ============================================================================
+
+  "train_period": {
+    "start_date": "2022-01-01 00:00:00",
+    "end_date": "2024-11-01 00:00:00"
+  },
+
+  "test_period": {
+    "start_date": "2024-11-01 00:00:00",
+    "end_date": "2025-12-31 23:59:59"
+  },
+
+  // ============================================================================
+  // PREDICTIONS & SIGNALS
+  // ============================================================================
+
+  "predictions_file": "${data_folder}/predictions_orderflow.csv",
+  "models_folder": "${data_folder}/MODELS_ORDERFLOW",
+
+  "score_thresholds": {
+    "buy_signal_threshold": 0.012,    // Higher threshold with more features
+    "sell_signal_threshold": -0.012
+  },
+
+  // ============================================================================
+  // SIMULATION / BACKTESTING
+  // ============================================================================
+
+  "simulate_model": {
+    // Grid search for optimal thresholds
+    "grid": {
+      "buy_signal_threshold": [0.008, 0.010, 0.012, 0.015, 0.020],
+      "sell_signal_threshold": [-0.008, -0.010, -0.012, -0.015, -0.020]
+    },
+
+    // Trading parameters
+    "initial_balance": 10000,
+    "trade_amount_usd": 100,
+    "fee_percent": 0.08,  // 0.08% round-trip fees (Binance spot)
+
+    // Risk management (using dynamic TP/SL from risk_manager.py)
+    "use_dynamic_stops": true,
+    "base_take_profit_pct": 0.40,   // Match label target
+    "base_stop_loss_pct": 0.30,     // Slightly tighter stop
+
+    // Output
+    "output_file": "${data_folder}/simulation_results_orderflow.csv",
+    "plot": false
+  }
+}

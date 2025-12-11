@@ -18,8 +18,10 @@ Train models for all target labels and all algorithms declared in the configurat
 
 @click.command()
 @click.option('--config_file', '-c', type=click.Path(), default='', help='Configuration file name')
-def main(config_file):
-    load_config(config_file)
+@click.option('--symbol', type=str, default=None, help='Symbol override (e.g., BTCUSDT, ETHUSDT)')
+@click.option('--freq', type=str, default=None, help='Frequency override (e.g., 1m, 5m, 1h)')
+def main(config_file, symbol, freq):
+    load_config(config_file, symbol=symbol, freq=freq)
     config = App.config
 
     App.model_store = ModelStore(config)

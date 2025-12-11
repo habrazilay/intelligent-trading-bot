@@ -9,6 +9,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from binance import Client
 import traceback
+from datetime import datetime
+from pathlib import Path
 
 from common.types import Venue
 from service.App import *
@@ -24,6 +26,74 @@ from outputs.notifier_diagram import *
 from outputs import get_trader_functions
 import logging
 import os
+
+# Placeholder logger - will be configured after config is loaded
+log = logging.getLogger(__name__)
+
+
+def setup_logging(config: dict) -> None:
+    """
+    Configure logging with session-specific log file.
+    Log file pattern: logs/server_{symbol}_{freq}_{algo}_{YYYYMMDD_HHMMSS}.log
+    """
+    # Create logs directory if it doesn't exist
+    logs_dir = Path(PACKAGE_ROOT) / "logs"
+    logs_dir.mkdir(exist_ok=True)
+
+    # Extract session info from config
+    symbol = config.get("symbol", "UNKNOWN")
+    freq = config.get("freq", "unknown")
+
+    # Get algorithm name(s)
+    algorithms = config.get("algorithms", [])
+    if algorithms:
+        algo_names = "_".join([a.get("name", "unknown") for a in algorithms[:2]])  # Max 2 algos in filename
+    else:
+        algo_names = "noalgo"
+
+    # Get strategy suffix from config file name if available
+    config_file = config.get("config_file", "")
+    strategy = ""
+    if config_file:
+        # Extract strategy from config filename like "btcusdt_1m_staging_v2.jsonc" -> "staging_v2"
+        config_name = Path(config_file).stem  # Remove .jsonc extension
+        parts = config_name.split("_")
+        if len(parts) > 2:
+            strategy = "_".join(parts[2:])  # Everything after symbol_freq
+
+    # Generate timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Build log filename
+    if strategy:
+        log_filename = f"server_{symbol}_{freq}_{algo_names}_{strategy}_{timestamp}.log"
+    else:
+        log_filename = f"server_{symbol}_{freq}_{algo_names}_{timestamp}.log"
+
+    log_path = logs_dir / log_filename
+
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+
+    # Clear any existing handlers
+    root_logger.handlers.clear()
+
+    # File handler - all logs go to file only
+    file_handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s [%(name)s] %(message)s'))
+    root_logger.addHandler(file_handler)
+
+    # Suppress verbose HTTP logs
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    logging.getLogger('apscheduler').setLevel(logging.WARNING)
+
+    # Log the session start
+    log.info("=" * 60)
+    log.info("LOG FILE: %s", log_path)
+    log.info("=" * 60)
+
 
 async def main_task():
     #
@@ -95,16 +165,6 @@ async def main_collector_task():
     now_ts = now_timestamp()
 
     log.info(f"===> Start collector task. Timestamp {now_ts}. Interval [{start_ts},{end_ts}].")
-    log.info("=== START LIVE SESSION ===")
-    log.info(f"Symbol          : {App.config['symbol']}")
-    log.info(f"Freq (freq)     : {App.config['freq']}")
-    log.info(f"Label horizon   : {App.config.get('label_horizon')}")
-    log.info(f"Features horizon: {App.config.get('features_horizon')}")
-    log.info(f"Train length    : {App.config.get('train_length')}")
-    log.info(f"Algorithms      : {[a['name'] for a in App.config.get('algorithms', [])]}")
-    log.info(f"Trade model     : {App.config.get('trade_model')}")
-    log.info(f"ENABLE_LIVE_TRADING={os.getenv('ENABLE_LIVE_TRADING')}")
-    log.info("============================================")
 
     #
     # 1. Check server state (if necessary)
@@ -145,6 +205,9 @@ def start_server(config_file):
     App.config["train"] = False
     # Save config file path for reference
     App.config["config_file"] = config_file
+
+    # Setup session-specific logging (logs to file only, no terminal output)
+    setup_logging(App.config)
 
     log.info("=== START LIVE SESSION ===")
     log.info("Config file     : %s", config_file)

@@ -1,44 +1,48 @@
-name: Run full BTCUSDT 1m dev pipeline on Azure ACI (via child workflows)
+name: ITB Trading Pipeline - Full
 
 on:
   workflow_dispatch:
     inputs:
       config_path:
-        description: "Path to JSONC config file"
+        description: "Config file (e.g., configs/btcusdt_5m_aggressive.jsonc)"
         required: true
-        default: "configs/btcusdt_1m_dev_optimazed.jsonc"
+        default: "configs/btcusdt_1m_dev.jsonc"
       image_tag:
-        description: "Image tag (just the tag, e.g. amd64-1764313462)"
+        description: "Docker image tag (e.g., amd64-1764313462 or latest)"
         required: true
-        default: "amd64-1764313462"
+        default: "latest"
 
 jobs:
   merge_features:
-    uses: ./.github/workflows/merge-only-aci.yml
-    secrets: inherit              
+    name: Merge + Features
+    uses: ./.github/workflows/step-merge-features.yml
+    secrets: inherit
     with:
       config_path: ${{ github.event.inputs.config_path }}
       image_tag:   ${{ github.event.inputs.image_tag }}
 
   labels:
+    name: Generate Labels
     needs: merge_features
-    uses: ./.github/workflows/labels_new-olny-aci.yml
+    uses: ./.github/workflows/step-labels.yml
     secrets: inherit
     with:
       config_path: ${{ github.event.inputs.config_path }}
       image_tag:   ${{ github.event.inputs.image_tag }}
 
   train:
+    name: Train Models
     needs: labels
-    uses: ./.github/workflows/train-only-aci.yml
+    uses: ./.github/workflows/step-train.yml
     secrets: inherit
     with:
       config_path: ${{ github.event.inputs.config_path }}
       image_tag:   ${{ github.event.inputs.image_tag }}
 
   predict_signals:
+    name: Predict + Signals
     needs: train
-    uses: ./.github/workflows/predict-signals-only-aci.yml
+    uses: ./.github/workflows/step-predict-signals.yml
     secrets: inherit
     with:
       config_path: ${{ github.event.inputs.config_path }}

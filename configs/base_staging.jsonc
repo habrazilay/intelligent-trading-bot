@@ -1,0 +1,232 @@
+{
+  // ============================================================================
+  // BASE STAGING CONFIG
+  // ============================================================================
+  // Strategy: Production/staging mode (predict-only, no training)
+  // Use: python -m scripts.predict --config configs/base_staging.jsonc --symbol BTCUSDT --freq 5m
+  // Purpose: Use pre-trained models to generate live predictions
+  // ============================================================================
+
+  // === EXECUTION ==============================================================
+
+  "train": false,  // STAGING: No training, only predict with existing models
+  "venue": "binance",
+
+  "api_key": "",
+  "api_secret": "",
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+
+  // === PATHS (NO HARDCODED SYMBOL/FREQ) ======================================
+
+  "data_folder": "./DATA_ITB_{freq}",
+  "symbol": "{symbol}",
+
+  "merge_file_name":   "data.csv",
+  "feature_file_name": "features_staging.csv",
+  "matrix_file_name":  "matrix_staging.csv",
+  "predict_file_name": "predictions_staging.csv",
+  "signal_file_name":  "signals_staging.csv",
+  "signal_models_file_name": "signal_models_staging",
+
+  "model_folder": "MODELS",  // Use models trained elsewhere
+  "description": "Staging/production - predict only",
+  "freq": "{freq}",
+  "pandas_freq": "{pandas_freq}",
+  "time_column": "timestamp",
+
+  // === WINDOWS AND SIZES ======================================================
+
+  "label_horizon":   24,
+  "features_horizon": 24,
+  "train_length":    105120,  // Not used in staging but needed for config validation
+  "predict_length":  288,     // Last 288 candles for prediction
+  "append_overlap_records": 5,
+
+  // === DOWNLOAD AND MERGE ====================================================
+
+  "data_sources": [
+    { "folder": "{symbol}", "file": "klines", "column_prefix": "" }
+  ],
+
+  "download_start": "2024-01-01",  // STAGING: Only recent data (last 1 year)
+  "download_end":   null,
+  "merge_interpolate": false,
+
+  // === FEATURES ==============================================================
+  // STAGING: Must match features used in training
+  // Using TESTED configuration from btcusdt_5m_staging_v2.jsonc
+
+  "feature_sets": [
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["SMA"],"windows":[5,10,20,60]}},
+
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["RSI"],"windows":[14]}},
+
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["LINEARREG_SLOPE"],"windows":[10,20,60]}},
+
+    { "generator":"talib",
+      "config":{"columns":["high","low","close"],"functions":["ATR"],"windows":[14]}},
+
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["STDDEV"],"windows":[20,60]}}
+  ],
+
+  // === LABELS ================================================================
+  // STAGING: Labels not used (no training), but needed for config
+  // Using TESTED thresholds from btcusdt_5m_staging_v2.jsonc
+
+  "label_sets": [
+    {
+      "generator":"highlow2",
+      "config":{
+        "columns": ["close","high","low"],
+        "function": "high",
+        "thresholds": [0.5],
+        "tolerance": 0.05,
+        "horizon": 24,
+        "names": ["high_05_24"]
+      }
+    },
+    {
+      "generator":"highlow2",
+      "config":{
+        "columns": ["close","high","low"],
+        "function": "low",
+        "thresholds": [0.5],
+        "tolerance": 0.05,
+        "horizon": 24,
+        "names": ["low_05_24"]
+      }
+    }
+  ],
+
+  // === TRAINING ==============================================================
+  // STAGING: Not used (train=false), but models must be pre-trained
+
+  "train_feature_sets": [
+    {
+      "generator": "train_features",
+      "config": {}
+    }
+  ],
+
+  "train_features": [
+    "close_SMA_5","close_SMA_10","close_SMA_20","close_SMA_60",
+    "close_RSI_14",
+    "close_LINEARREG_SLOPE_10","close_LINEARREG_SLOPE_20","close_LINEARREG_SLOPE_60",
+    "high_low_close_ATR_14",
+    "close_STDDEV_20","close_STDDEV_60"
+  ],
+
+  "labels": ["high_05_24","low_05_24"],
+
+  "algorithms": [
+    // Using TESTED Logistic Classifier from btcusdt_5m_staging_v2.jsonc
+    {
+      "name":"lc",
+      "algo":"lc",
+      "params":{"is_scale":true},
+      "train":{"penalty":"l2","C":1.0,"solver":"sag","max_iter":500}
+    }
+  ],
+
+  "base_asset": "BTC",
+  "quote_asset": "USDT",
+
+  "trade_model": {
+    "trader_binance": true,
+    "no_trades_only_data_processing": false,
+    "test_order_before_submit": true,            // Binance test order first
+    "simulate_order_execution": false,
+
+    "percentage_used_for_trade": 2.0,            // 2% of USDT balance per trade
+    "min_notional_usdt": 5.0,                    // Binance minimum (US$5)
+    "min_balance_usdt_for_percentage": 500.0,    // Below this, use min_notional
+    "limit_price_adjustment": 0.0                // +/-0% of last close
+  },
+
+  // === SIGNALS ===============================================================
+  // STAGING: Use TESTED thresholds from btcusdt_5m_staging_v2.jsonc
+
+  "signal_sets": [
+    {
+      "generator":"combine",
+      "config":{
+        "columns":["high_05_24_lc","low_05_24_lc"],
+        "names":"trade_score",
+        "combine":"difference"
+      }
+    },
+    {
+      "generator":"threshold_rule",
+      "config":{
+        "columns":"trade_score",
+        "names":["buy_signal","sell_signal"],
+        "parameters":{
+          // TESTED thresholds from btcusdt_5m_staging_v2.jsonc
+          "buy_signal_threshold": 0.0035,
+          "sell_signal_threshold": -0.0045
+        }
+      }
+    }
+  ],
+
+  // === OUTPUTS ===============================================================
+
+  "output_sets": [
+    {
+      "generator":"score_notification_model",
+      "config":{
+        "score_notification":true,
+        "score_column_names":["trade_score"]
+      }
+    },
+    {
+      "generator":"trader_simulation",
+      "config":{
+        "buy_signal_column":"buy_signal",
+        "sell_signal_column":"sell_signal"
+      }
+    },
+    {
+      "generator":"trader_binance",
+      "config":{
+        "buy_signal_column":"buy_signal",
+        "sell_signal_column":"sell_signal",
+        "percentage_used_for_trade":2.0
+      }
+    }
+  ],
+
+  // === THRESHOLD OPTIMIZATION ================================================
+  // STAGING: Using TESTED thresholds from btcusdt_5m_staging_v2.jsonc
+
+  "simulate_model": {
+    "data_start":0,
+    "data_end":null,
+    "direction":"long",
+    "topn_to_store":10,
+    "signal_generator":"threshold_rule",
+    "buy_sell_equal":false,
+    "grid":{
+      "buy_signal_threshold":[0.002, 0.003, 0.004],
+      "sell_signal_threshold":[-0.002, -0.003, -0.004]
+    }
+  },
+
+  // === ROLLING PREDICT =======================================================
+  // STAGING: Use for live prediction updates
+
+  "rolling_predict": {
+    "data_start": "2024-11-17 00:00:00",
+    "data_end":   null,
+    "prediction_start": null,
+    "prediction_size": 288,      // Smaller for staging (faster)
+    "prediction_steps": 1,       // Only latest predictions
+    "use_multiprocessing": false, // Simpler for staging
+    "max_workers": 1
+  }
+}

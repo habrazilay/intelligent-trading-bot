@@ -138,6 +138,8 @@ def predict_feature_set(df, fs, config, model_store: ModelStore) -> Tuple[pd.Dat
                 df_y_hat = predict_nn(model_pair, train_df, model_config)
             elif algo_type == "lc":
                 df_y_hat = predict_lc(model_pair, train_df, model_config)
+            elif algo_type == "lgbm":
+                df_y_hat = predict_lgbm(model_pair, train_df, model_config)
             elif algo_type == "svc":
                 df_y_hat = predict_svc(model_pair, train_df, model_config)
             else:
@@ -189,6 +191,9 @@ def train_feature_set(df, fs, config) -> dict:
                 models[score_column_name] = model_pair
             elif algo_type == "lc":
                 model_pair = train_lc(df_X, df_y, model_config)
+                models[score_column_name] = model_pair
+            elif algo_type == "lgbm":
+                model_pair = train_lgbm(df_X, df_y, model_config)
                 models[score_column_name] = model_pair
             elif algo_type == "svc":
                 model_pair = train_svc(df_X, df_y, model_config)
