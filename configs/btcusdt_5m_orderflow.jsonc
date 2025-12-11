@@ -1,34 +1,33 @@
-/*
-BTCUSDT 5-Minute Aggressive Trading with Order Flow Features
-
-This config combines:
-1. Traditional technical indicators (SMA, RSI, ATR) - 17 features
-2. **NEW** Order flow features from L2 order book - 19 features
-3. Regime and spread features - 4 features
-
-Total: 40 features (vs 17 in baseline)
-
-Order flow features are expected to provide +5-10% win rate improvement
-by capturing buying/selling pressure BEFORE price moves.
-
-Expected results:
-- Baseline (no order flow): 50.9% win rate, -7.9% profit
-- With order flow: 55-60% win rate, +10-20% profit
-
-Usage:
-  1. Collect order book data first:
-     python scripts/collect_orderbook.py --symbol BTCUSDT --duration 7d --save-interval 6h
-
-  2. Run full pipeline:
-     python scripts/features_new.py -c configs/btcusdt_5m_orderflow.jsonc
-     python scripts/labels_new.py -c configs/btcusdt_5m_orderflow.jsonc
-     python scripts/merge_new.py -c configs/btcusdt_5m_orderflow.jsonc
-     python scripts/train.py -c configs/btcusdt_5m_orderflow.jsonc
-     python scripts/signals.py -c configs/btcusdt_5m_orderflow.jsonc
-     python scripts/simulate.py -c configs/btcusdt_5m_orderflow.jsonc
-*/
-
 {
+  // ============================================================================
+  // BTCUSDT 5-Minute Aggressive Trading with Order Flow Features
+  // ============================================================================
+  //
+  // This config combines:
+  // 1. Traditional technical indicators (SMA, RSI, ATR) - 17 features
+  // 2. **NEW** Order flow features from L2 order book - 19 features
+  // 3. Regime and spread features - 4 features
+  //
+  // Total: 40 features (vs 17 in baseline)
+  //
+  // Order flow features are expected to provide +5-10% win rate improvement
+  // by capturing buying/selling pressure BEFORE price moves.
+  //
+  // Expected results:
+  // - Baseline (no order flow): 50.9% win rate, -7.9% profit
+  // - With order flow: 55-60% win rate, +10-20% profit
+  //
+  // Usage:
+  //   1. Collect order book data first:
+  //      python scripts/collect_orderbook.py --symbol BTCUSDT --duration 7d --save-interval 6h
+  //
+  //   2. Run full pipeline:
+  //      python -m scripts.features -c configs/btcusdt_5m_orderflow.jsonc --symbol BTCUSDT --freq 5m
+  //      python -m scripts.labels -c configs/btcusdt_5m_orderflow.jsonc --symbol BTCUSDT --freq 5m
+  //      python -m scripts.train -c configs/btcusdt_5m_orderflow.jsonc --symbol BTCUSDT --freq 5m
+  //      python -m scripts.simulate -c configs/btcusdt_5m_orderflow.jsonc --symbol BTCUSDT --freq 5m
+  // ============================================================================
+
   // ============================================================================
   // DATA CONFIGURATION
   // ============================================================================
