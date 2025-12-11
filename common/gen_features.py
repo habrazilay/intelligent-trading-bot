@@ -257,10 +257,52 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
                     out = next(iter(fn_columns.values())).copy()
                 else:
                     out = fn(**args)
+                # Handle functions that return multiple outputs (BBANDS, MACD, etc.)
+                if isinstance(out, tuple):
+                    # Function returned multiple arrays (e.g., BBANDS returns 3: upper, middle, lower)
+                    # We need to convert each to a pandas Series and add them separately
+                    suffixes = {
+                        'BBANDS': ['upper', 'middle', 'lower'],
+                        'MACD': ['macd', 'macdsignal', 'macdhist'],
+                        'STOCH': ['slowk', 'slowd'],
+                        'STOCHF': ['fastk', 'fastd'],
+                        'STOCHRSI': ['fastk', 'fastd'],
+                    }
 
-                # Ensure out is always a Series
-                if not isinstance(out, pd.Series):
-                    out = pd.Series(out, index=df.index)
+                    # Get suffixes for this function, or use generic names
+                    func_suffixes = suffixes.get(func_name.upper(), [f'output{i+1}' for i in range(len(out))])
+
+                    # Process each output separately
+                    for idx, single_out in enumerate(out):
+                        # Convert numpy array to pandas Series
+                        if not isinstance(single_out, pd.Series):
+                            single_out = pd.Series(single_out, index=df.index)
+
+                        # Create name for this specific output
+                        suffix = func_suffixes[idx] if idx < len(func_suffixes) else f'output{idx+1}'
+                        if not w:
+                            if not names:
+                                out_name_multi = f"{col_out_names}_{func_name}_{suffix}"
+                            elif isinstance(names, str):
+                                out_name_multi = f"{names}_{suffix}"
+                            elif isinstance(names, list):
+                                out_name_multi = f"{names[j]}_{suffix}"
+                        else:
+                            out_name_base = f"{col_out_names}_{func_name}_"
+                            win_name = str(w)
+                            if not names:
+                                out_name_multi = f"{out_name_base}{win_name}_{suffix}"
+                            elif isinstance(names, str):
+                                out_name_multi = f"{out_name_base}{names}_{win_name}_{suffix}"
+                            elif isinstance(names, list):
+                                out_name_multi = f"{names[j]}_{suffix}"
+
+                        single_out.name = out_name_multi
+                        fn_outs.append(single_out)
+                        fn_out_names.append(out_name_multi)
+
+                    # Skip the normal single-output processing below
+                    continue
 
             #
             # Online: In a loop, compute the specified number of single values for the manually prepared windows

@@ -82,9 +82,15 @@ help:
 	@echo "    make gcp-lstm               - Run LSTM GPU training (CONFIG=...)"
 	@echo "    make gcp-monitor            - Monitor GCP costs"
 	@echo ""
+	@echo "  Quick Commands (Easy!):"
+	@echo "    make dl SYMBOL=ETHUSDT FREQ=5m        - Download data"
+	@echo "    make run SYMBOL=ETHUSDT FREQ=5m       - Run full pipeline (conservative)"
+	@echo "    make run SYMBOL=SOL FREQ=5m STRATEGY=aggressive  - Run with strategy"
+	@echo ""
 	@echo "  Utilities:"
 	@echo "    make validate         - Validate all configs"
 	@echo "    make clean            - Clean generated files"
+	@echo "    make clean-cache      - Clean Python cache (fix import errors)"
 	@echo "    make test             - Run tests"
 	@echo ""
 
@@ -219,6 +225,65 @@ pipeline-generic:
 	@echo "Generic pipeline complete!"
 
 # =============================================================================
+# Quick Commands (User-friendly)
+# =============================================================================
+
+# Download with symbol/freq
+# Usage: make dl SYMBOL=ETHUSDT FREQ=5m
+dl:
+	@if [ -z "$(SYMBOL)" ] || [ -z "$(FREQ)" ]; then \
+		echo "╔════════════════════════════════════════════════════════════════╗"; \
+		echo "║  Download Binance Data                                         ║"; \
+		echo "╚════════════════════════════════════════════════════════════════╝"; \
+		echo ""; \
+		echo "Usage: make dl SYMBOL=<symbol> FREQ=<freq>"; \
+		echo ""; \
+		echo "Examples:"; \
+		echo "  make dl SYMBOL=ETHUSDT FREQ=5m"; \
+		echo "  make dl SYMBOL=BTCUSDT FREQ=1m"; \
+		echo "  make dl SYMBOL=SOLUSDT FREQ=5m"; \
+		echo ""; \
+		echo "Available Symbols: BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT"; \
+		echo "Available Frequencies: 1m, 5m, 15m, 1h"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@echo "Downloading $(SYMBOL) $(FREQ)..."
+	@python -m scripts.download_binance -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+
+# Full pipeline with symbol/freq
+# Usage: make run SYMBOL=ETHUSDT FREQ=5m
+run:
+	@if [ -z "$(SYMBOL)" ] || [ -z "$(FREQ)" ]; then \
+		echo "╔════════════════════════════════════════════════════════════════╗"; \
+		echo "║  Run Full Pipeline                                             ║"; \
+		echo "╚════════════════════════════════════════════════════════════════╝"; \
+		echo ""; \
+		echo "Usage: make run SYMBOL=<symbol> FREQ=<freq> [STRATEGY=<strategy>]"; \
+		echo ""; \
+		echo "Examples:"; \
+		echo "  make run SYMBOL=ETHUSDT FREQ=5m"; \
+		echo "  make run SYMBOL=ETHUSDT FREQ=5m STRATEGY=aggressive"; \
+		echo "  make run SYMBOL=SOLUSDT FREQ=5m STRATEGY=quick"; \
+		echo ""; \
+		echo "Available Symbols: BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT"; \
+		echo "Available Frequencies: 1m, 5m, 15m, 1h"; \
+		echo "Available Strategies: conservative (default), aggressive, quick"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@# Determine config based on STRATEGY
+	@if [ "$(STRATEGY)" = "aggressive" ]; then \
+		CONFIG=configs/base_aggressive.jsonc; \
+	elif [ "$(STRATEGY)" = "quick" ]; then \
+		CONFIG=configs/base_quick_profit.jsonc; \
+	else \
+		CONFIG=configs/base_conservative.jsonc; \
+	fi; \
+	echo "Running pipeline with $$CONFIG for $(SYMBOL) $(FREQ)..."; \
+	$(MAKE) pipeline-generic BASE_CONFIG=$$CONFIG SYMBOL=$(SYMBOL) FREQ=$(FREQ)
+
+# =============================================================================
 # Quick Pipelines (New Generic System)
 # =============================================================================
 
@@ -346,6 +411,14 @@ clean:
 	find . -type d -name "__pycache__" -delete
 	find . -type f -name ".DS_Store" -delete
 	@echo "Clean complete!"
+
+clean-cache:
+	@echo "Cleaning Python cache and bytecode..."
+	find . -type f -name "*.pyc" -delete
+	find . -type f -name "*.pyo" -delete
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+	@echo "Python cache cleaned! Try running your command again."
 
 test:
 	@echo "Running tests..."
