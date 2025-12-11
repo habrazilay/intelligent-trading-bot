@@ -185,11 +185,8 @@
         "columns":"trade_score",
         "names":["buy_signal","sell_signal"],
         "parameters":{
-          // FIXED: Inverted thresholds for LONG strategy
-          // buy when score < 0 (low_pred > high_pred = expect price drop = buy cheap)
-          // sell when score > 0 (high_pred > low_pred = expect price rise = sell high)
-          "buy_signal_threshold": -0.004,   // Buy when expecting LOW (descida)
-          "sell_signal_threshold": 0.004    // Sell when expecting HIGH (subida)
+          "buy_signal_threshold": 0.004,   // CONSERVATIVE: higher threshold
+          "sell_signal_threshold": -0.004
         }
       }
     }
@@ -226,10 +223,8 @@
     "buy_sell_equal":false,
     "grid":{
       // CONSERVATIVE: Test conservative thresholds
-      // FIXED: Inverted thresholds for LONG strategy
-      // buy_signal when score < 0 (expect LOW), sell_signal when score > 0 (expect HIGH)
-      "buy_signal_threshold":[-0.003, -0.004, -0.005, -0.006],
-      "sell_signal_threshold":[0.003, 0.004, 0.005, 0.006]
+      "buy_signal_threshold":[0.003, 0.004, 0.005, 0.006],
+      "sell_signal_threshold":[-0.003, -0.004, -0.005, -0.006]
     }
   },
 
