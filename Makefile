@@ -222,6 +222,7 @@ pipeline-generic:
 	python -m scripts.train -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
 	python -m scripts.predict -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
 	python -m scripts.signals -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
+	python -m scripts.simulate -c $(BASE_CONFIG) --symbol $(SYMBOL) --freq $(FREQ)
 	@echo "Generic pipeline complete!"
 
 # =============================================================================
