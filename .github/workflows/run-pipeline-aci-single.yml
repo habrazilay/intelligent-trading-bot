@@ -4,8 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       symbol:
-        description: 'Trading symbol (e.g., BTCUSDT, ETHUSDT)'
+        description: 'Trading symbol'
         required: true
+        type: choice
+        options:
+          - BTCUSDT
+          - ETHUSDT
+          - XRPUSDT
+          - BNBUSDT
         default: 'BTCUSDT'
       freq:
         description: 'Timeframe (1m, 5m, 1h)'
@@ -23,8 +29,7 @@ on:
         options:
           - conservative
           - aggressive
-          - staging
-          - quick
+          - quick_profit
         default: 'conservative'
       image_tag:
         description: 'Docker image tag (leave empty for dev-training)'
@@ -80,17 +85,19 @@ jobs:
       - name: Set variables
         id: vars
         run: |
-          CONTAINER_NAME="itb-pipeline-${SYMBOL,,}-${FREQ}"
-          FILE_SHARE="data-itb-${FREQ}"
+          # Single shared container - can run any symbol/freq/strategy
+          CONTAINER_NAME="itb-pipeline-runner"
+
+          # Data mount path for current freq
           DATA_MOUNT="/app/DATA_ITB_${FREQ}"
 
           echo "container_name=${CONTAINER_NAME}" >> $GITHUB_OUTPUT
-          echo "file_share=${FILE_SHARE}" >> $GITHUB_OUTPUT
           echo "data_mount=${DATA_MOUNT}" >> $GITHUB_OUTPUT
 
           echo "📦 Container: ${CONTAINER_NAME}"
-          echo "📁 File Share: ${FILE_SHARE}"
           echo "🎯 Config: ${CONFIG_PATH}"
+          echo "🪙 Symbol: ${SYMBOL}"
+          echo "⏱️ Freq: ${FREQ}"
 
       - name: Check existing container
         id: cleanup
@@ -127,8 +134,6 @@ jobs:
         timeout-minutes: 15
         run: |
           CONTAINER_NAME="${{ steps.vars.outputs.container_name }}"
-          FILE_SHARE="${{ steps.vars.outputs.file_share }}"
-          DATA_MOUNT="${{ steps.vars.outputs.data_mount }}"
 
           # Get storage account location (must match ACI location for file share mount)
           STORAGE_LOCATION=$(az storage account show \
@@ -145,35 +150,108 @@ jobs:
           fi
 
           echo ""
+          echo "🔍 Checking which file shares exist..."
+
+          # Check which file shares exist
+          SHARES_1M=$(az storage share exists --name data-itb-1m --account-name ${{ vars.AZURE_STORAGE_ACCOUNT }} --account-key ${{ secrets.AZURE_STORAGE_KEY }} --query exists -o tsv 2>/dev/null || echo "false")
+          SHARES_5M=$(az storage share exists --name data-itb-5m --account-name ${{ vars.AZURE_STORAGE_ACCOUNT }} --account-key ${{ secrets.AZURE_STORAGE_KEY }} --query exists -o tsv 2>/dev/null || echo "false")
+          SHARES_1H=$(az storage share exists --name data-itb-1h --account-name ${{ vars.AZURE_STORAGE_ACCOUNT }} --account-key ${{ secrets.AZURE_STORAGE_KEY }} --query exists -o tsv 2>/dev/null || echo "false")
+
+          echo "   data-itb-1m: $SHARES_1M"
+          echo "   data-itb-5m: $SHARES_5M"
+          echo "   data-itb-1h: $SHARES_1H"
+
+          # Build volume mounts and volumes dynamically
+          VOLUME_MOUNTS=""
+          VOLUMES=""
+          MOUNTS_LIST=""
+
+          if [ "$SHARES_1M" = "true" ]; then
+            VOLUME_MOUNTS="${VOLUME_MOUNTS}
+                - name: data-1m
+                  mountPath: /app/DATA_ITB_1m"
+            VOLUMES="${VOLUMES}
+            - name: data-1m
+              azureFile:
+                shareName: data-itb-1m
+                storageAccountName: ${{ vars.AZURE_STORAGE_ACCOUNT }}
+                storageAccountKey: ${{ secrets.AZURE_STORAGE_KEY }}"
+            MOUNTS_LIST="${MOUNTS_LIST} data-itb-1m"
+          fi
+
+          if [ "$SHARES_5M" = "true" ]; then
+            VOLUME_MOUNTS="${VOLUME_MOUNTS}
+                - name: data-5m
+                  mountPath: /app/DATA_ITB_5m"
+            VOLUMES="${VOLUMES}
+            - name: data-5m
+              azureFile:
+                shareName: data-itb-5m
+                storageAccountName: ${{ vars.AZURE_STORAGE_ACCOUNT }}
+                storageAccountKey: ${{ secrets.AZURE_STORAGE_KEY }}"
+            MOUNTS_LIST="${MOUNTS_LIST} data-itb-5m"
+          fi
+
+          if [ "$SHARES_1H" = "true" ]; then
+            VOLUME_MOUNTS="${VOLUME_MOUNTS}
+                - name: data-1h
+                  mountPath: /app/DATA_ITB_1h"
+            VOLUMES="${VOLUMES}
+            - name: data-1h
+              azureFile:
+                shareName: data-itb-1h
+                storageAccountName: ${{ vars.AZURE_STORAGE_ACCOUNT }}
+                storageAccountKey: ${{ secrets.AZURE_STORAGE_KEY }}"
+            MOUNTS_LIST="${MOUNTS_LIST} data-itb-1h"
+          fi
+
+          if [ -z "$MOUNTS_LIST" ]; then
+            echo "❌ Error: No file shares found! At least one data share must exist."
+            exit 1
+          fi
+
+          echo ""
           echo "🚀 Creating container $CONTAINER_NAME..."
           echo "   Image: ${{ env.ACR_IMAGE }}:${{ env.IMAGE_TAG }}"
           echo "   Resource Group: ${{ vars.AZURE_RESOURCE_GROUP }}"
           echo "   Location: $LOCATION"
           echo "   Storage: ${{ vars.AZURE_STORAGE_ACCOUNT }} ($STORAGE_LOCATION)"
+          echo "   Mounts:${MOUNTS_LIST}"
           echo ""
 
-          # Create container with Azure File mount
+          # Create YAML config for container with conditional file share mounts
+          cat > /tmp/aci-config.yaml << EOF
+          apiVersion: 2021-09-01
+          location: $LOCATION
+          name: $CONTAINER_NAME
+          properties:
+            containers:
+            - name: pipeline
+              properties:
+                image: ${{ env.ACR_IMAGE }}:${{ env.IMAGE_TAG }}
+                command:
+                - tail
+                - -f
+                - /dev/null
+                resources:
+                  requests:
+                    cpu: 2
+                    memoryInGb: 4
+                volumeMounts:${VOLUME_MOUNTS}
+            imageRegistryCredentials:
+            - server: ${{ vars.ACR_LOGIN_SERVER }}
+              username: ${{ secrets.ACR_USERNAME }}
+              password: ${{ secrets.ACR_PASSWORD }}
+            osType: Linux
+            restartPolicy: Never
+            volumes:${VOLUMES}
+          type: Microsoft.ContainerInstance/containerGroups
+          EOF
+
+          # Create container from YAML
           az container create \
-            --location "$LOCATION" \
-            --name "$CONTAINER_NAME" \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --image "${{ env.ACR_IMAGE }}:${{ env.IMAGE_TAG }}" \
-            --os-type Linux \
-            --registry-login-server "${{ vars.ACR_LOGIN_SERVER }}" \
-            --registry-username "${{ secrets.ACR_USERNAME }}" \
-            --registry-password "${{ secrets.ACR_PASSWORD }}" \
-            --restart-policy Never \
-            --cpu 2 \
-            --memory 4 \
-            --environment-variables \
-              CONFIG_PATH="${{ env.CONFIG_PATH }}" \
-              SYMBOL="${{ env.SYMBOL }}" \
-              FREQ="${{ env.FREQ }}" \
-            --azure-file-volume-share-name "$FILE_SHARE" \
-            --azure-file-volume-account-name "${{ vars.AZURE_STORAGE_ACCOUNT }}" \
-            --azure-file-volume-account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
-            --azure-file-volume-mount-path "$DATA_MOUNT" \
-            --command-line "tail -f /dev/null"
+            --file /tmp/aci-config.yaml
 
           echo ""
           echo "✅ Container created, checking status..."

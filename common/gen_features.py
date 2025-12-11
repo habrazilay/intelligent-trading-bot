@@ -218,11 +218,11 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
         fn_columns = columns
 
         # Special cases: Some TA-Lib functions require specific named inputs
-        # ATR: high, low, close
+        # ATR, CCI: high, low, close
         if (
             isinstance(original_column_names, list)
             and len(original_column_names) == 3
-            and func_name.upper() == "ATR"
+            and func_name.upper() in ("ATR", "CCI")
         ):
             fn_columns = {
                 "high": df[original_column_names[0]].interpolate(),
@@ -287,7 +287,12 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
                 if w and accepts_timeperiod:
                     args['timeperiod'] = w
 
-                if w == 1 and len(fn_columns) == 1:  # For window 1 use the original values (because talib fails to do this)
+                # Functions that return multiple outputs have their own internal periods
+                # and should not be bypassed even when window=1
+                multi_output_functions = {'BBANDS', 'MACD', 'STOCH', 'STOCHF', 'STOCHRSI'}
+
+                if w == 1 and len(fn_columns) == 1 and func_name.upper() not in multi_output_functions:
+                    # For window 1 use the original values (because talib fails to do this)
                     out = next(iter(fn_columns.values())).copy()
                 else:
                     out = fn(**args)
