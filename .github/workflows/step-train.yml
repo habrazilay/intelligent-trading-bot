@@ -31,8 +31,7 @@ on:
         type: string
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/train
+  ACR_IMAGE: itbacr.azurecr.io/itb-bot
 
 jobs:
   train:
@@ -40,10 +39,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     container:
-      image: ghcr.io/${{ github.repository }}/train:dev
+      image: itbacr.azurecr.io/itb-bot:dev-training
       credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
     env:
       CONFIG: ${{ inputs.config_path || github.event.inputs.config_path || 'configs/base_conservative.jsonc' }}
       SYMBOL: ${{ inputs.symbol || github.event.inputs.symbol || 'BTCUSDT' }}

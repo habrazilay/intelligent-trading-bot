@@ -11,6 +11,15 @@ on:
           - build        # Build new image with version
           - promote      # Promote existing image to another env
         default: 'build'
+      target:
+        description: 'Docker build target'
+        required: true
+        type: choice
+        options:
+          - production   # Shadow mode (~400MB)
+          - training     # ML training (~600MB)
+          - full         # Development (~1.1GB)
+        default: 'training'
       version:
         description: 'Version (e.g., 1.2.3) - required for build'
         required: false
@@ -81,27 +90,40 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.version }}"
           ENV="${{ github.event.inputs.environment }}"
+          TARGET="${{ github.event.inputs.target }}"
           SHORT_SHA=${GITHUB_SHA::7}
 
-          # Main version tag with environment
-          if [ "$ENV" == "prod" ]; then
-            VERSION_TAG="v${VERSION}"
+          # Target suffix (production has no suffix for backwards compatibility)
+          if [ "$TARGET" == "production" ]; then
+            TARGET_SUFFIX=""
           else
-            VERSION_TAG="v${VERSION}-${ENV}"
+            TARGET_SUFFIX="-${TARGET}"
+          fi
+
+          # Main version tag with environment and target
+          if [ "$ENV" == "prod" ]; then
+            VERSION_TAG="v${VERSION}${TARGET_SUFFIX}"
+          else
+            VERSION_TAG="v${VERSION}-${ENV}${TARGET_SUFFIX}"
           fi
 
           # Full tag with commit SHA for traceability
-          FULL_TAG="v${VERSION}-${ENV}-${SHORT_SHA}"
+          FULL_TAG="v${VERSION}-${ENV}${TARGET_SUFFIX}-${SHORT_SHA}"
+
+          # Environment tag (used by workflows)
+          ENV_TAG="${ENV}${TARGET_SUFFIX}"
 
           echo "version_tag=${VERSION_TAG}" >> $GITHUB_OUTPUT
           echo "full_tag=${FULL_TAG}" >> $GITHUB_OUTPUT
-          echo "env_tag=${ENV}" >> $GITHUB_OUTPUT
+          echo "env_tag=${ENV_TAG}" >> $GITHUB_OUTPUT
           echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "target=${TARGET}" >> $GITHUB_OUTPUT
 
           echo "📦 Tags to create:"
           echo "   - ${VERSION_TAG} (main)"
           echo "   - ${FULL_TAG} (with SHA)"
-          echo "   - ${ENV} (environment latest)"
+          echo "   - ${ENV_TAG} (environment latest)"
+          echo "🎯 Target: ${TARGET}"
 
       - name: Login to Docker Hub
         if: github.event.inputs.push_to == 'dockerhub' || github.event.inputs.push_to == 'both'
@@ -121,6 +143,7 @@ jobs:
       - name: Build Docker image
         run: |
           docker build \
+            --target ${{ github.event.inputs.target }} \
             --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
             --build-arg VERSION=${{ github.event.inputs.version }} \
             --build-arg VCS_REF=${{ steps.tags.outputs.short_sha }} \
@@ -173,6 +196,7 @@ jobs:
           echo "## 🐳 Docker Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** \`${{ github.event.inputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Target:** \`${{ github.event.inputs.target }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Environment:** \`${{ github.event.inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** \`${{ steps.tags.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -185,7 +209,8 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Usage in Workflows" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
-          echo "image_tag: ${{ steps.tags.outputs.version_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "container:" >> $GITHUB_STEP_SUMMARY
+          echo "  image: ${{ env.ACR_IMAGE }}:${{ steps.tags.outputs.env_tag }}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   # =============================================================================
