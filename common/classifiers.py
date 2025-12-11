@@ -18,13 +18,20 @@ except ImportError:
     LGBM_AVAILABLE = False
     print("⚠️  Warning: lightgbm not installed. Install with: pip install lightgbm")
 
-import tensorflow as tf
-from tensorflow import keras
-from keras.optimizers import *
-from keras.models import Sequential
-from keras.layers import Dense, Dropout
-from keras.regularizers import *
-from keras.callbacks import *
+# TensorFlow is optional - only needed for neural network models
+try:
+    import tensorflow as tf
+    from tensorflow import keras
+    from keras.optimizers import *
+    from keras.models import Sequential
+    from keras.layers import Dense, Dropout
+    from keras.regularizers import *
+    from keras.callbacks import *
+    TF_AVAILABLE = True
+except ImportError:
+    TF_AVAILABLE = False
+    tf = None
+    # These are only used in NN functions which check TF_AVAILABLE
 
 #
 # LGBM - LightGBM (Gradient Boosting)
@@ -279,6 +286,9 @@ def train_nn(df_X, df_y, model_config: dict):
     """
     Train model with the specified hyper-parameters and return this model (and scaler if any).
     """
+    if not TF_AVAILABLE:
+        raise ImportError("TensorFlow not installed. Run: pip install tensorflow")
+
     params = model_config.get("params", {})
 
     is_scale = params.get("is_scale", True)
@@ -386,6 +396,9 @@ def predict_nn(models: tuple, df_X_test, model_config: dict):
     Use the model(s) to make predictions for the test data.
     The first model is a prediction model and the second model (optional) is a scaler.
     """
+    if not TF_AVAILABLE:
+        raise ImportError("TensorFlow not installed. Run: pip install tensorflow")
+
     #
     # Scale
     #

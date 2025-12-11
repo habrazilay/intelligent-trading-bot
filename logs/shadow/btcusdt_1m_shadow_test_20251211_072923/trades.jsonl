@@ -1,0 +1,2 @@
+{"type": "signal", "session_id": "btcusdt_1m_shadow_test_20251211_072923", "timestamp": 1733900000000, "datetime": "2024-12-11T06:53:20+00:00", "signal": "BUY", "price": 91750.0, "score": 0.005}
+{"type": "order", "session_id": "btcusdt_1m_shadow_test_20251211_072923", "trade_num": 1, "order_id": "TEST_001", "timestamp": 1733900000000, "datetime": "2024-12-11T06:53:20+00:00", "side": "BUY", "order_type": "LIMIT", "price": 91700.0, "quantity": 0.001, "notional_usdt": 91.7, "status": "SIMULATED", "fill_price": 91705.0, "pnl": null, "pnl_pct": null}
