@@ -98,9 +98,9 @@ def main(config_file, symbol, freq):
     # Load signal train parameters
     #
     parameter_grid = simulate_config.get("grid")
-    direction = simulate_config.get("direction", "")
-    if direction not in ['long', 'short']:
-        raise ValueError(f"Unknown value of {direction} in signal train model. Only 'long' or 'short' are possible.")
+    direction = simulate_config.get("direction", "long")
+    if direction not in ['long', 'short', 'both']:
+        raise ValueError(f"Unknown value of {direction} in signal train model. Only 'long', 'short' or 'both' are possible.")
     topn_to_store = simulate_config.get("topn_to_store", 10)
 
     # Evaluate strings to produce lists with ranges of parameters
@@ -170,11 +170,19 @@ def main(config_file, symbol, freq):
             performance = long_performance
         elif direction == "short":
             performance = short_performance
+        # direction == "both" uses combined performance (default from simulated_trade_performance)
 
         # Add monthly numbers
         performance["#transactions/M"] = round(performance["#transactions"] / months_in_simulation, 2)
         performance["profit/M"] = round(performance["profit"] / months_in_simulation, 2)
         performance["%profit/M"] = round(performance["%profit"] / months_in_simulation, 2)
+
+        # For "both" direction, also add breakdown by strategy
+        if direction == "both":
+            performance["long_%profit"] = long_performance["%profit"]
+            performance["short_%profit"] = short_performance["%profit"]
+            performance["long_#T"] = long_performance["#transactions"]
+            performance["short_#T"] = short_performance["#transactions"]
 
         performances.append(dict(
             model=parameters,

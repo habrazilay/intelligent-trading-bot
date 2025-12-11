@@ -4,6 +4,7 @@ from enum import Enum
 class Venue(Enum):
     YAHOO = "yahoo"
     BINANCE = "binance"
+    BINANCE_FUTURES = "binance_futures"  # Binance Futures (supports SHORT)
     MT5 = "mt5"
     
 class AccountBalances:

@@ -1,0 +1,279 @@
+{
+  // ============================================================================
+  // BASE FUTURES CONFIG - LONG + SHORT TRADING
+  // ============================================================================
+  // Strategy: Bidirectional trading using Binance Futures
+  // Supports: LONG (buy low, sell high) + SHORT (sell high, buy low)
+  // Risk: Configurable per direction
+  // ============================================================================
+
+  // === EXECUTION ==============================================================
+
+  "train": true,  // Set to false for staging/production (predict-only mode)
+  "venue": "binance_futures",  // NEW: Use Futures API
+
+  // Credentials from .env (BINANCE_API_KEY / BINANCE_API_SECRET)
+  // For Futures, same keys work if Futures is enabled on your account
+  "api_key": "",
+  "api_secret": "",
+
+  // Telegram notifications (optional, reads from .env if empty)
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+
+  // === FUTURES SETTINGS =====================================================
+
+  "futures": {
+    // Use testnet for testing (HIGHLY RECOMMENDED before production)
+    // Testnet URL: https://testnet.binancefuture.com
+    "use_testnet": true,
+
+    // Leverage: 1 = no leverage (safest), max varies by pair
+    // RECOMMENDATION: Start with 1x until you validate the strategy
+    "leverage": 1,
+
+    // Margin type: "ISOLATED" (safer, limited loss) or "CROSSED" (uses full balance)
+    "margin_type": "ISOLATED",
+
+    // Position mode: "ONE_WAY" (simpler) or "HEDGE" (can hold long+short simultaneously)
+    "position_mode": "ONE_WAY"
+  },
+
+  // === PATHS (NO HARDCODED SYMBOL/FREQ) ======================================
+
+  "data_folder": "./DATA_ITB_{freq}",
+  "symbol": "{symbol}",
+
+  "merge_file_name":   "data.csv",
+  "feature_file_name": "features_futures.csv",
+  "matrix_file_name":  "matrix_futures.csv",
+  "predict_file_name": "predictions_futures.csv",
+  "signal_file_name":  "signals_futures.csv",
+  "signal_models_file_name": "signal_models_futures",
+
+  "model_folder": "MODELS_FUTURES",
+  "description": "Futures bidirectional strategy - LONG + SHORT",
+  "freq": "{freq}",
+  "pandas_freq": "{pandas_freq}",
+  "time_column": "timestamp",
+
+  // === WINDOWS AND SIZES ====================================================
+
+  "label_horizon":   24,
+  "features_horizon": 120,
+  "train_length":    105132,
+  "predict_length":  288,
+  "append_overlap_records": 5,
+
+  // === DOWNLOAD AND MERGE ===================================================
+
+  "data_sources": [
+    { "folder": "{symbol}", "file": "klines", "column_prefix": "" }
+  ],
+
+  "download_start": "2022-01-01",
+  "download_end":   null,
+  "merge_interpolate": false,
+
+  // === FEATURES =============================================================
+
+  "feature_sets": [
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["SMA"],"windows":[5,10,20,60,120]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["EMA"],"windows":[12,26]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["RSI"],"windows":[14]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["LINEARREG_SLOPE"],"windows":[10,20,60]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["MOM"],"windows":[10]}},
+    { "generator":"talib",
+      "config":{"columns":["high","low","close"],"functions":["ATR"],"windows":[14]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["STDDEV"],"windows":[20,60]}},
+    { "generator":"talib",
+      "config":{"columns":["close"],"functions":["BBANDS"],"windows":[20]}},
+    { "generator":"talib",
+      "config":{"columns":["close","volume"],"functions":["OBV"],"windows":[1]}},
+    { "generator":"talib",
+      "config":{"columns":["volume"],"functions":["SMA"],"windows":[20]}}
+  ],
+
+  "features": [
+    "close_SMA_5","close_SMA_10","close_SMA_20","close_SMA_60","close_SMA_120",
+    "close_EMA_12","close_EMA_26",
+    "close_RSI_14",
+    "close_LINEARREG_SLOPE_10","close_LINEARREG_SLOPE_20","close_LINEARREG_SLOPE_60",
+    "close_MOM_10",
+    "high_low_close_ATR_14",
+    "close_STDDEV_20","close_STDDEV_60",
+    "close_BBANDS_20_upper","close_BBANDS_20_middle","close_BBANDS_20_lower",
+    "close_volume_OBV_1","volume_SMA_20"
+  ],
+
+  // === LABELS ===============================================================
+
+  "label_sets": [
+    {
+      "generator":"highlow2",
+      "config":{
+        "columns":["close","high","low"],
+        "function":"high",
+        "thresholds":[0.6],
+        "horizon":24,
+        "names":["high_06_24"]
+      }
+    },
+    {
+      "generator":"highlow2",
+      "config":{
+        "columns":["close","high","low"],
+        "function":"low",
+        "thresholds":[0.6],
+        "horizon":24,
+        "names":["low_06_24"]
+      }
+    }
+  ],
+
+  "labels": ["high_06_24","low_06_24"],
+
+  // === TRAINING =============================================================
+
+  "train_features": [
+    {
+      "generator":"train_features",
+      "config":{
+        "algorithms":["lc","lgbm"],
+        "train_features_class":"sklearn.linear_model.LogisticRegression",
+        "train_features_config":{
+          "penalty":"l2","C":1.0,"class_weight":"balanced",
+          "solver":"saga","max_iter":200
+        },
+        "lgbm_config":{
+          "objective":"binary","metric":"binary_logloss",
+          "boosting_type":"gbdt","num_leaves":31,
+          "learning_rate":0.05,"n_estimators":300,"verbose":-1,
+          "class_weight":"balanced"
+        },
+        "features":"all",
+        "labels":["high_06_24","low_06_24"]
+      }
+    }
+  ],
+
+  // === SIGNAL GENERATION ====================================================
+
+  "signal_sets": [
+    {
+      "generator":"combine",
+      "config":{
+        "columns":["high_06_24_lgbm","low_06_24_lgbm"],
+        "names":"trade_score",
+        "combine":"difference"
+      }
+    },
+    {
+      "generator":"threshold_rule",
+      "config":{
+        "columns":"trade_score",
+        "names":["buy_signal","sell_signal"],
+        "parameters":{
+          "buy_signal_threshold": 0.003,
+          "sell_signal_threshold":-0.003
+        }
+      }
+    }
+  ],
+
+  // === LIVE TRADING - FUTURES ===============================================
+
+  "trade_model": {
+    "trader_binance_futures": true,  // NEW: Use Futures trader
+
+    "no_trades_only_data_processing": false,
+    "test_order_before_submit": true,   // Test first on testnet
+    "simulate_order_execution": false,
+
+    // Shadow mode for safe testing
+    "shadow_mode": false,
+    "force_real_trade": false,
+
+    "order_type": "MARKET",
+
+    // === LONG POSITION SETTINGS ===
+    "long": {
+      "enabled": true,
+      "position_size_percent": 2.0,      // 2% of balance per LONG trade
+      "stop_loss_percent": 2.0,          // -2% stop loss
+      "take_profit_percent": 3.0         // +3% take profit
+    },
+
+    // === SHORT POSITION SETTINGS ===
+    "short": {
+      "enabled": true,                   // Enable SHORT trading
+      "position_size_percent": 1.5,      // 1.5% of balance per SHORT (more conservative)
+      "stop_loss_percent": 1.5,          // -1.5% stop loss (tighter for shorts)
+      "take_profit_percent": 2.5         // +2.5% take profit
+    },
+
+    // General settings
+    "min_notional_usdt": 6.0,
+    "min_balance_usdt_for_percentage": 500.0,
+    "limit_price_adjustment": 0.002
+  },
+
+  // === RISK MANAGEMENT ======================================================
+
+  "risk_management": {
+    // Global stop-loss (fallback if position-specific not set)
+    "stop_loss_percent": 2.0,
+    "take_profit_percent": 3.0,
+
+    // Circuit Breaker
+    "circuit_breaker": {
+      "max_consecutive_losses": 3,
+      "cooldown_minutes": 60,
+      "max_daily_losses": 5,
+      "max_daily_loss_percent": 10.0
+    }
+  },
+
+  "base_asset": "BTC",   // Will be extracted from symbol
+  "quote_asset": "USDT",
+
+  // === OUTPUTS & NOTIFICATIONS ==============================================
+
+  "output_sets": [
+    {
+      "generator":"trader_simulation",
+      "config":{
+        "buy_signal_column":"buy_signal",
+        "sell_signal_column":"sell_signal"
+      }
+    },
+    {
+      "generator":"notifier_telegram",
+      "config":{
+        "notify_signals": true,
+        "notify_trades": true
+      }
+    }
+  ],
+
+  // === SIMULATION ===========================================================
+
+  "simulate_model": {
+    "data_start":0,
+    "data_end":null,
+    "direction":"both",  // Simulate LONG + SHORT
+    "topn_to_store":10,
+    "signal_generator":"threshold_rule",
+    "buy_sell_equal":false,
+    "grid":{
+      "buy_signal_threshold":[0.002, 0.003, 0.004, 0.005],
+      "sell_signal_threshold":[-0.002, -0.003, -0.004, -0.005]
+    }
+  }
+}

@@ -10,7 +10,7 @@ def get_trader_functions(venue: Venue) -> dict[str, callable]:
         funcs["trader"](...)
         funcs["update_order_status"](...)
     """
-    if venue == venue.BINANCE:
+    if venue == Venue.BINANCE:
         from outputs.trader_binance import (
             trader_binance,
             update_account_balance as update_account_balance_binance,
@@ -23,14 +23,26 @@ def get_trader_functions(venue: Venue) -> dict[str, callable]:
             "update_order_status": update_order_status_binance,
             "update_trade_status": update_trade_status_binance,
         }
-    elif venue == venue.MT5:
+    elif venue == Venue.BINANCE_FUTURES:
+        from outputs.trader_binance_futures import (
+            trader_binance_futures,
+            update_futures_account_balance,
+            update_futures_order_status,
+            update_futures_position_status,
+        )
+        return {
+            "trader": trader_binance_futures,
+            "update_account_balance": update_futures_account_balance,
+            "update_order_status": update_futures_order_status,
+            "update_trade_status": update_futures_position_status,
+        }
+    elif venue == Venue.MT5:
         from outputs.trader_mt5 import (
             trader_mt5,
             update_account_balance as update_account_balance_mt5,
             update_order_status as update_order_status_mt5,
             update_trade_status as update_trade_status_mt5,
         )
-
         return {
             "trader": trader_mt5,
             "update_account_balance": update_account_balance_mt5,

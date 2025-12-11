@@ -247,7 +247,7 @@ def start_server(config_file):
     #
     # Connect to the server and update/initialize the system state
     #
-    if venue == Venue.BINANCE:
+    if venue in (Venue.BINANCE, Venue.BINANCE_FUTURES):
         client_args = App.config.get("client_args", {})
         # Prefer keys from config; fallback to environment variables loaded by dotenv
         api_key = App.config.get("api_key") or os.getenv("BINANCE_API_KEY")
@@ -268,6 +268,35 @@ def start_server(config_file):
         except Exception as e:
             log.error("Falha ao inicializar Binance Client: %s", e)
             return
+
+        # Initialize Futures client if using Futures venue
+        if venue == Venue.BINANCE_FUTURES:
+            futures_config = App.config.get("futures", {})
+            use_testnet = futures_config.get("use_testnet", True)
+
+            try:
+                if use_testnet:
+                    # Binance Futures Testnet
+                    log.info("Initializing Binance Futures TESTNET client")
+                    App.futures_client = Client(
+                        api_key=api_key,
+                        api_secret=api_secret,
+                        testnet=True
+                    )
+                    log.warning("⚠️  USING FUTURES TESTNET - Not real money!")
+                else:
+                    # Production Futures
+                    log.info("Initializing Binance Futures PRODUCTION client")
+                    App.futures_client = App.client  # Same client works for Futures
+
+                # Setup Futures account (leverage, margin type)
+                from outputs.trader_binance_futures import setup_futures_account
+                App.loop = asyncio.new_event_loop()
+                App.loop.run_until_complete(setup_futures_account())
+
+            except Exception as e:
+                log.error("Falha ao inicializar Binance Futures Client: %s", e)
+                return
 
     App.model_store = ModelStore(App.config)
     App.model_store.load_models()

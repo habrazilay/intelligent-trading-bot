@@ -46,10 +46,18 @@ class App:
 
     # Trade simulator
     transaction = None
-    # Trade binance
+    # Trade binance (Spot)
     status = None  # BOUGHT, SOLD, BUYING, SELLING
     order = None  # Latest or current order
     order_time = None  # Order submission time
+
+    # Trade binance (Futures)
+    futures_client = None  # Binance Futures client
+    futures_status = None  # FLAT, LONG, SHORT, OPENING_LONG, OPENING_SHORT, CLOSING_LONG, CLOSING_SHORT
+    futures_order = None  # Latest or current Futures order
+    futures_order_time = None  # Futures order submission time
+    futures_position = None  # Current Futures position info
+    futures_balance = None  # Available Futures balance (USDT)
 
     # Account Info
     # Available assets for trade
