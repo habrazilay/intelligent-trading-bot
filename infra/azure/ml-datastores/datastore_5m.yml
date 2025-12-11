@@ -1,0 +1,6 @@
+$schema: https://azuremlschemas.azureedge.net/latest/azureFile.schema.json
+name: datastore_itb_5m
+type: azure_file
+description: ITB data for 5m timeframe
+account_name: stitbdev
+file_share_name: data-itb-5m
