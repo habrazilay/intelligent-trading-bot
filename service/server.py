@@ -25,6 +25,21 @@ from outputs import get_trader_functions
 import logging
 import os
 
+# Configure logging to file and console
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(message)s',
+    handlers=[
+        logging.FileHandler("server.log", mode="a", encoding="utf-8"),
+        logging.StreamHandler()
+    ]
+)
+log = logging.getLogger(__name__)
+
+# Set DEBUG level for HTTP requests (optional - comment out for less verbose logs)
+logging.getLogger('urllib3').setLevel(logging.DEBUG)
+
+
 async def main_task():
     #
     # 1. Execute input adapters to receive new data from data source(s)

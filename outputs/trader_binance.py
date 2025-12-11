@@ -3,6 +3,7 @@ import asyncio
 import logging
 from datetime import datetime
 from decimal import Decimal
+from typing import Optional
 
 import pandas as pd
 
@@ -25,10 +26,23 @@ log = logging.getLogger(__name__)
 from service.App import App
 from common.utils import now_timestamp, to_decimal, round_str, round_down_str
 from common.model_store import ModelStore
+from common.risk_management import RiskManager
 from outputs.notifier_trades import get_signal
 
 import logging
 log = logging.getLogger("trader")
+
+# Global risk manager instance (initialized on first use)
+_risk_manager: Optional[RiskManager] = None
+
+
+def get_risk_manager() -> RiskManager:
+    """Get or initialize the global RiskManager instance."""
+    global _risk_manager
+    if _risk_manager is None:
+        _risk_manager = RiskManager(App.config)
+        log.info("RiskManager initialized")
+    return _risk_manager
 
 
 async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_store: ModelStore):
@@ -38,7 +52,8 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
     It is scheduled every minute by the server and:
     1. Reads the latest signal from the dataframe.
     2. Synchronizes trade status with Binance (orders + balances).
-    3. Decides whether to open new BUY/SELL limit orders.
+    3. Checks risk management conditions (stop-loss, take-profit, circuit breaker).
+    4. Decides whether to open new BUY/SELL limit orders.
     """
     # Normalize model: sometimes a list of models may be passed; use the first element
     if isinstance(model, list):
@@ -62,6 +77,16 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
     close_time = signal.get("close_time")
 
     log.info(f"===> Start trade task. Timestamp {now_ts}. Interval [{startTime},{endTime}].")
+
+    # Get risk manager instance
+    risk_manager = get_risk_manager()
+
+    # Check circuit breaker before any trading
+    if not risk_manager.is_trading_allowed():
+        remaining = risk_manager.circuit_breaker.time_until_reset()
+        print(f"🚨 CIRCUIT BREAKER ACTIVE - Trading paused. Remaining: {remaining}")
+        log.warning("Circuit breaker active. Trading paused. Remaining: %s", remaining)
+        return
 
     #
     # 1. Sync trade status, check running orders (orders, account etc.)
@@ -90,10 +115,22 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
             log.info(f"Limit order filled. {order}")
             if status == "BUYING":
                 print(f"===> BOUGHT: {order}")
+                log.info("===> BOUGHT: %s", order)
                 App.status = "BOUGHT"
+                # Register position in risk manager
+                entry_price = Decimal(str(order.get("price", close_price)))
+                quantity = Decimal(str(order.get("executedQty", "0")))
+                risk_manager.open_position(entry_price, "BUY", quantity)
             elif status == "SELLING":
                 print(f"<=== SOLD: {order}")
+                log.info("<=== SOLD: %s", order)
                 App.status = "SOLD"
+                # Close position in risk manager
+                exit_price = Decimal(str(order.get("price", close_price)))
+                # Use risk exit reason if it was set (stop-loss, take-profit, etc.)
+                exit_reason = getattr(App, 'risk_exit_reason', None) or "signal"
+                risk_manager.close_position(exit_price, exit_reason=exit_reason)
+                App.risk_exit_reason = None  # Reset for next trade
             log.info(f"New trade mode: {App.status}")
         elif order_status in (ORDER_STATUS_REJECTED, ORDER_STATUS_EXPIRED, ORDER_STATUS_CANCELED):
             log.error(f"Failed to fill order with order status {order_status}")
@@ -139,10 +176,26 @@ async def trader_binance(df: pd.DataFrame, model: dict, config: dict, model_stor
             App.status = "BOUGHT"
 
     #
-    # 3. Trade by creating orders
+    # 3. Check risk management conditions (stop-loss, take-profit)
     #
     status = App.status
 
+    if status == "BOUGHT" and close_price is not None:
+        current_price = Decimal(str(close_price))
+        exit_reason = risk_manager.check_exit_conditions(current_price)
+
+        if exit_reason:
+            # Risk management triggered - force sell
+            print(f"🛑 RISK MANAGEMENT: {exit_reason.upper()} triggered at {close_price:.2f}")
+            log.warning("RISK MANAGEMENT: %s triggered at %.2f", exit_reason.upper(), close_price)
+
+            # Override signal to force SELL
+            signal_side = "SELL"
+            App.risk_exit_reason = exit_reason  # Store for later use
+
+    #
+    # 4. Trade by creating orders
+    #
     if signal_side == "BUY":
         print(f"===> BUY SIGNAL {signal}: ")
         log.info("===> BUY SIGNAL %s", signal)

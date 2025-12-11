@@ -25,7 +25,7 @@
   "signal_models_file_name": "signal_models",
 
   "model_folder": "MODELS",
-  "description": "BTCUSDT 1 min strategy",
+  "description": "BTCUSDT 1 min strategy - SHADOW MODE (simulação apenas)",
   "freq": "1m",           // frequência Binance
   "pandas_freq": "1min",  // frequência Pandas
   "time_column": "timestamp",
@@ -213,6 +213,7 @@
   "quote_asset": "USDT",
 
   // === SAÍDAS & NOTIFICAÇÕES =============================================
+  // SHADOW MODE: Apenas simulação, SEM trading real
 
   "output_sets": [
     // {
@@ -236,7 +237,7 @@
         "sell_signal_column":"sell_signal",
         "percentage_used_for_trade":2.0
       }
-    },
+    }
   ],
 
   // === OTIMIZAÇÃO DE THRESHOLDS ===========================================
