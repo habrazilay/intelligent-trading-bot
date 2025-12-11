@@ -26,8 +26,9 @@ def main(config_file, dry_run, log_level, symbol, freq):
     load_config(config_file, symbol=symbol, freq=freq)
     config = App.config
 
+    # Initialize model store but don't load models (features don't need them)
     App.model_store = ModelStore(config)
-    App.model_store.load_models()
+    # App.model_store.load_models()  # Not needed for features generation
 
     time_column = config.get("time_column", "time")
     if "time_column" not in config:

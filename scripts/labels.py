@@ -55,9 +55,9 @@ def main(config_file, dry_run, log_level, symbol, freq):
     load_config(config_file, symbol=symbol, freq=freq)
     config = App.config
 
-    # ModelStore (não é estritamente necessário para labels, mas mantemos padrão)
+    # Initialize model store but don't load models (labels don't need them)
     App.model_store = ModelStore(config)
-    App.model_store.load_models()
+    # App.model_store.load_models()  # Not needed for label generation
 
     time_column = config.get("time_column", "time")
     if "time_column" not in config:
