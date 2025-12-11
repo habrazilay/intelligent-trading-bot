@@ -196,8 +196,8 @@
         "columns":"trade_score",
         "names":["buy_signal","sell_signal"],
         "parameters":{
-          "buy_signal_threshold": 0.002,   // AGGRESSIVE: lower threshold
-          "sell_signal_threshold": -0.002
+          "buy_signal_threshold": -0.002,   // FIXED: Buy when expecting LOW
+          "sell_signal_threshold": 0.002    // Sell when expecting HIGH
         }
       }
     }
@@ -234,8 +234,8 @@
     "buy_sell_equal":false,
     "grid":{
       // AGGRESSIVE: Test lower thresholds
-      "buy_signal_threshold":[0.001, 0.0015, 0.002, 0.0025, 0.003],
-      "sell_signal_threshold":[-0.001, -0.0015, -0.002, -0.0025, -0.003]
+      "buy_signal_threshold":[-0.001, -0.0015, -0.002, -0.0025, -0.003],
+      "sell_signal_threshold":[0.001, 0.0015, 0.002, 0.0025, 0.003]
     }
   },
 
