@@ -1,0 +1,237 @@
+{
+  // === SHADOW MODE CONFIG ====================================================
+  //
+  // Config otimizado para shadow trading (simulação conectada à Binance real)
+  // Usa dados reais mas simula todas as ordens.
+  //
+  // Uso:
+  //   ./run_shadow.sh configs/btcusdt_1m_shadow.jsonc
+  //   python run_shadow.py -c configs/btcusdt_1m_shadow.jsonc --balance 5000
+  //
+
+  // === EXECUÇÃO GERAL ========================================================
+
+  "train": false,
+  "venue": "binance",
+
+  // Credenciais lidas de .env
+  "api_key": "",
+  "api_secret": "",
+
+  "data_folder": "./DATA_ITB_1m",
+
+  "symbol": "BTCUSDT",
+  "feature_file_name": "features.csv",
+  "merge_file_name": "data.csv",
+  "matrix_file_name": "matrix.csv",
+  "predict_file_name": "predictions.csv",
+  "signal_file_name": "signals.csv",
+  "signal_models_file_name": "signal_models",
+
+  "model_folder": "MODELS",
+  "description": "BTCUSDT 1m Shadow Mode",
+  "freq": "1m",
+  "pandas_freq": "1min",
+  "time_column": "timestamp",
+
+  // === JANELAS E TAMANHOS ====================================================
+
+  "label_horizon": 60,
+  "features_horizon": 60,
+  "train_length": 525600,
+  "predict_length": 288,
+  "append_overlap_records": 5,
+
+  // === DATA SOURCES ==========================================================
+
+  "data_sources": [
+    { "folder": "BTCUSDT", "file": "klines", "column_prefix": "" }
+  ],
+
+  "download_start": "2022-01-01",
+  "download_end": null,
+  "merge_interpolate": false,
+
+  // === FEATURES ==============================================================
+
+  "feature_sets": [
+    { "generator": "talib",
+      "config": { "columns": ["close"], "functions": ["SMA"], "windows": [5, 10, 20, 60] }},
+    { "generator": "talib",
+      "config": { "columns": ["close"], "functions": ["RSI"], "windows": [14] }},
+    { "generator": "talib",
+      "config": { "columns": ["close"], "functions": ["LINEARREG_SLOPE"], "windows": [10, 20, 60] }},
+    { "generator": "talib",
+      "config": { "columns": ["high", "low", "close"], "functions": ["ATR"], "windows": [14] }},
+    { "generator": "talib",
+      "config": { "columns": ["close"], "functions": ["STDDEV"], "windows": [20, 60] }}
+  ],
+
+  // === LABELS ================================================================
+
+  "label_sets": [
+    {
+      "generator": "highlow2",
+      "config": {
+        "columns": ["close", "high", "low"],
+        "function": "high",
+        "thresholds": [0.5],
+        "tolerance": 0.1,
+        "horizon": 60,
+        "names": ["high_05_60"]
+      }
+    },
+    {
+      "generator": "highlow2",
+      "config": {
+        "columns": ["close", "high", "low"],
+        "function": "low",
+        "thresholds": [0.5],
+        "tolerance": 0.1,
+        "horizon": 60,
+        "names": ["low_05_60"]
+      }
+    }
+  ],
+
+  // === TREINO ================================================================
+
+  "train_feature_sets": [
+    { "generator": "train_features", "config": {} }
+  ],
+
+  "train_features": [
+    "close_SMA_5", "close_SMA_10", "close_SMA_20", "close_SMA_60",
+    "close_RSI_14",
+    "close_LINEARREG_SLOPE_10", "close_LINEARREG_SLOPE_20", "close_LINEARREG_SLOPE_60",
+    "high_low_close_ATR_14", "close_STDDEV_20", "close_STDDEV_60"
+  ],
+
+  "labels": ["high_05_60", "low_05_60"],
+
+  "algorithms": [
+    {
+      "name": "lc",
+      "algo": "lc",
+      "params": { "is_scale": true },
+      "train": { "penalty": "l2", "C": 1.0, "solver": "sag", "max_iter": 1000 }
+    }
+  ],
+
+  // === SINAIS ================================================================
+
+  "signal_sets": [
+    {
+      "generator": "combine",
+      "config": {
+        "columns": ["high_05_60_lc", "low_05_60_lc"],
+        "names": "trade_score",
+        "combine": "difference"
+      }
+    },
+    {
+      "generator": "threshold_rule",
+      "config": {
+        "columns": "trade_score",
+        "names": ["buy_signal", "sell_signal"],
+        "parameters": {
+          "buy_signal_threshold": 0.002,
+          "sell_signal_threshold": -0.002
+        }
+      }
+    }
+  ],
+
+  // === SHADOW MODE TRADING ===================================================
+  //
+  // IMPORTANTE: Estas configurações são para SHADOW MODE.
+  // - simulate_order_execution: true → Simula ordens (não envia para Binance)
+  // - test_order_before_submit: false → Não precisa testar ordens simuladas
+  //
+  // O shadow mode vai:
+  // 1. Conectar na Binance real para receber dados
+  // 2. Gerar sinais reais baseados nos dados
+  // 3. SIMULAR execução de ordens (não gasta dinheiro real)
+  // 4. Gravar tudo em logs para análise
+  //
+
+  "trade_model": {
+    "trader_binance": true,
+
+    // === SHADOW MODE FLAGS ===
+    "no_trades_only_data_processing": false,
+    "test_order_before_submit": false,      // Não precisa testar ordens simuladas
+    "simulate_order_execution": true,        // SHADOW MODE: Simula ordens
+
+    // === POSITION SIZING ===
+    "percentage_used_for_trade": 2.0,       // 2% do saldo por trade
+    "min_notional_usdt": 5.0,               // Mínimo por ordem
+    "min_balance_usdt_for_percentage": 500.0,
+    "limit_price_adjustment": 0.002         // 0.2% ajuste no preço limite
+  },
+
+  // === RISK MANAGEMENT =======================================================
+
+  "risk_management": {
+    // Stop-Loss: fecha posição se perda exceder esse percentual
+    "stop_loss_percent": 2.0,
+
+    // Take-Profit: fecha posição se lucro exceder esse percentual
+    "take_profit_percent": 3.0,
+
+    // Trailing Stop (desabilitado por padrão)
+    // "trailing_stop_percent": 1.0,
+    // "trailing_stop_activation": 1.5,
+
+    // Circuit Breaker: pausa trading após perdas consecutivas
+    "circuit_breaker": {
+      "max_consecutive_losses": 3,
+      "cooldown_minutes": 60,
+      "max_daily_losses": 5,
+      "max_daily_loss_percent": 10.0
+    }
+  },
+
+  "base_asset": "BTC",
+  "quote_asset": "USDT",
+
+  // === SAÍDAS ================================================================
+
+  "output_sets": [
+    {
+      "generator": "trader_binance",
+      "config": {
+        "buy_signal_column": "buy_signal",
+        "sell_signal_column": "sell_signal",
+        "percentage_used_for_trade": 2.0
+      }
+    }
+  ],
+
+  // === OTIMIZAÇÃO DE THRESHOLDS ==============================================
+
+  "simulate_model": {
+    "data_start": 0,
+    "data_end": null,
+    "direction": "long",
+    "topn_to_store": 10,
+    "signal_generator": "threshold_rule",
+    "buy_sell_equal": false,
+    "grid": {
+      "buy_signal_threshold": [0.001, 0.002, 0.003, 0.004, 0.005],
+      "sell_signal_threshold": [-0.001, -0.002, -0.003, -0.004, -0.005]
+    }
+  },
+
+  // === ROLLING PREDICT =======================================================
+
+  "rolling_predict": {
+    "data_start": "2024-11-17 00:00:00",
+    "data_end": null,
+    "prediction_start": null,
+    "prediction_size": 10080,
+    "prediction_steps": 4,
+    "use_multiprocessing": true,
+    "max_workers": 6
+  }
+}

@@ -1,0 +1,156 @@
+{
+  // === SHADOW MODE CONFIG (PRE-COMPUTED FEATURES) ===========================
+  //
+  // Este config usa features JÁ CALCULADAS nos arquivos CSV.
+  // NÃO precisa de TA-Lib instalado!
+  //
+  // Uso:
+  //   ./run_shadow.sh configs/btcusdt_1m_shadow_precomputed.jsonc
+  //
+
+  "train": false,
+  "venue": "binance",
+
+  "api_key": "",
+  "api_secret": "",
+
+  "data_folder": "./DATA_ITB_1m",
+
+  "symbol": "BTCUSDT",
+  "feature_file_name": "features.csv",
+  "merge_file_name": "data.csv",
+  "matrix_file_name": "matrix.csv",
+  "predict_file_name": "predictions.csv",
+  "signal_file_name": "signals.csv",
+  "signal_models_file_name": "signal_models",
+
+  "model_folder": "MODELS",
+  "description": "BTCUSDT 1m Shadow Mode (Pre-computed)",
+  "freq": "1m",
+  "pandas_freq": "1min",
+  "time_column": "timestamp",
+
+  "label_horizon": 60,
+  "features_horizon": 60,
+  "train_length": 525600,
+  "predict_length": 288,
+  "append_overlap_records": 5,
+
+  "data_sources": [
+    { "folder": "BTCUSDT", "file": "klines", "column_prefix": "" }
+  ],
+
+  "download_start": "2022-01-01",
+  "download_end": null,
+  "merge_interpolate": false,
+
+  // === FEATURES - VAZIO! Usa as já calculadas ===
+  "feature_sets": [],
+
+  // === LABELS ===
+  "label_sets": [
+    {
+      "generator": "highlow2",
+      "config": {
+        "columns": ["close", "high", "low"],
+        "function": "high",
+        "thresholds": [0.5],
+        "tolerance": 0.1,
+        "horizon": 60,
+        "names": ["high_05_60"]
+      }
+    },
+    {
+      "generator": "highlow2",
+      "config": {
+        "columns": ["close", "high", "low"],
+        "function": "low",
+        "thresholds": [0.5],
+        "tolerance": 0.1,
+        "horizon": 60,
+        "names": ["low_05_60"]
+      }
+    }
+  ],
+
+  "train_feature_sets": [
+    { "generator": "train_features", "config": {} }
+  ],
+
+  "train_features": [
+    "close_SMA_5", "close_SMA_10", "close_SMA_20", "close_SMA_60",
+    "close_RSI_14",
+    "close_LINEARREG_SLOPE_10", "close_LINEARREG_SLOPE_20", "close_LINEARREG_SLOPE_60",
+    "high_low_close_ATR_14", "close_STDDEV_20", "close_STDDEV_60"
+  ],
+
+  "labels": ["high_05_60", "low_05_60"],
+
+  "algorithms": [
+    {
+      "name": "lc",
+      "algo": "lc",
+      "params": { "is_scale": true },
+      "train": { "penalty": "l2", "C": 1.0, "solver": "sag", "max_iter": 1000 }
+    }
+  ],
+
+  "signal_sets": [
+    {
+      "generator": "combine",
+      "config": {
+        "columns": ["high_05_60_lc", "low_05_60_lc"],
+        "names": "trade_score",
+        "combine": "difference"
+      }
+    },
+    {
+      "generator": "threshold_rule",
+      "config": {
+        "columns": "trade_score",
+        "names": ["buy_signal", "sell_signal"],
+        "parameters": {
+          "buy_signal_threshold": 0.002,
+          "sell_signal_threshold": -0.002
+        }
+      }
+    }
+  ],
+
+  "trade_model": {
+    "trader_binance": true,
+    "no_trades_only_data_processing": false,
+    "test_order_before_submit": false,
+    "simulate_order_execution": true,
+
+    "percentage_used_for_trade": 2.0,
+    "min_notional_usdt": 5.0,
+    "min_balance_usdt_for_percentage": 500.0,
+    "limit_price_adjustment": 0.002
+  },
+
+  "risk_management": {
+    "stop_loss_percent": 2.0,
+    "take_profit_percent": 3.0,
+    "circuit_breaker": {
+      "max_consecutive_losses": 3,
+      "cooldown_minutes": 60,
+      "max_daily_losses": 5,
+      "max_daily_loss_percent": 10.0
+    }
+  },
+
+  "base_asset": "BTC",
+  "quote_asset": "USDT",
+
+  "output_sets": [
+    {
+      "generator": "trader_binance",
+      "config": {
+        "buy_signal_column": "buy_signal",
+        "sell_signal_column": "sell_signal",
+        "percentage_used_for_trade": 2.0
+      }
+    }
+  ]
+}
