@@ -804,3 +804,55 @@ forex-pipeline-eurusd:
 	python -m scripts.predict -c configs/forex_eurusd_1h.jsonc
 	python -m scripts.signals -c configs/forex_eurusd_1h.jsonc
 
+# =============================================================================
+# Azure Storage Sync
+# =============================================================================
+
+azure-sync:
+	@echo "Syncing all data to Azure Storage..."
+	python3 -m scripts.sync_to_azure --all
+
+azure-sync-orderbook:
+	@echo "Syncing orderbook data to Azure Storage..."
+	python3 -m scripts.sync_to_azure --orderbook
+
+azure-sync-trades:
+	@echo "Syncing trade logs to Azure Storage..."
+	python3 -m scripts.sync_to_azure --trades
+
+azure-sync-data:
+	@echo "Syncing klines data to Azure Storage..."
+	python3 -m scripts.sync_to_azure --data
+
+azure-sync-dry:
+	@echo "Dry run - showing what would be synced..."
+	python3 -m scripts.sync_to_azure --all --dry-run
+
+azure-stats:
+	@echo "Azure Storage stats..."
+	python3 -m scripts.sync_to_azure --stats
+
+# =============================================================================
+# Bot Status
+# =============================================================================
+
+bot-status:
+	@echo "Checking Binance Futures Testnet status..."
+	@python3 -c "\
+from dotenv import load_dotenv; load_dotenv('.env.dev'); \
+import os, time, hmac, hashlib, requests; \
+api_key = os.getenv('BINANCE_API_KEY_DEMO'); \
+api_secret = os.getenv('BINANCE_API_SECRET_DEMO'); \
+base_url = 'https://testnet.binancefuture.com'; \
+params = {'timestamp': int(time.time() * 1000)}; \
+query = '&'.join(f'{k}={v}' for k, v in params.items()); \
+sig = hmac.new(api_secret.encode(), query.encode(), hashlib.sha256).hexdigest(); \
+r = requests.get(f'{base_url}/fapi/v2/account?{query}&signature={sig}', headers={'X-MBX-APIKEY': api_key}); \
+a = r.json(); \
+print('=== BINANCE FUTURES TESTNET ==='); \
+print(f'Balance: \$${float(a.get(\"totalWalletBalance\", 0)):,.2f}'); \
+print(f'Unrealized PnL: \$${float(a.get(\"totalUnrealizedProfit\", 0)):,.2f}'); \
+positions = [p for p in a.get('positions', []) if float(p.get('positionAmt', 0)) != 0]; \
+print(f'Open Positions: {len(positions)}'); \
+[print(f\"  {p['symbol']}: {'LONG' if float(p['positionAmt']) > 0 else 'SHORT'} {abs(float(p['positionAmt']))} | PnL: \$${float(p['unrealizedProfit']):.2f}\") for p in positions]"
+

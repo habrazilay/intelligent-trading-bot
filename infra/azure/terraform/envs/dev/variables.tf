@@ -87,3 +87,19 @@ variable "ml_scale_down_minutes" {
   type        = number
   default     = 15
 }
+
+# -----------------------------------------------------------------------------
+# Data Collector VM
+# -----------------------------------------------------------------------------
+
+variable "collector_vm_size" {
+  description = "VM size for the data collector (B1s is cheapest ~$15/month)"
+  type        = string
+  default     = "Standard_B1s"
+}
+
+variable "ssh_public_key" {
+  description = "SSH public key for VM access"
+  type        = string
+  default     = ""
+}
