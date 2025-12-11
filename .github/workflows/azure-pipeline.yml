@@ -101,6 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     needs: validate
+    if: ${{ github.event.inputs.pipeline_mode != 'predict-only' }}
 
     steps:
       - name: Checkout code
@@ -111,6 +112,19 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
+
+      - name: Install TA-Lib system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential wget
+          wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+          tar -xzf ta-lib-0.4.0-src.tar.gz
+          cd ta-lib/
+          ./configure --prefix=/usr
+          make
+          sudo make install
+          cd ..
+          rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
 
       - name: Install dependencies
         run: pip install -r requirements-train.txt
@@ -180,6 +194,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     needs: feature-engineering
+    if: ${{ github.event.inputs.pipeline_mode != 'predict-only' }}
 
     steps:
       - name: Checkout code
@@ -190,6 +205,19 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
+
+      - name: Install TA-Lib system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential wget
+          wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+          tar -xzf ta-lib-0.4.0-src.tar.gz
+          cd ta-lib/
+          ./configure --prefix=/usr
+          make
+          sudo make install
+          cd ..
+          rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
 
       - name: Install dependencies
         run: pip install -r requirements-train.txt
@@ -234,7 +262,8 @@ jobs:
     name: Backtest Strategy
     runs-on: ubuntu-latest
     environment: dev
-    needs: train-models
+    needs: [validate, train-models]
+    if: ${{ always() && (github.event.inputs.pipeline_mode == 'full' || github.event.inputs.pipeline_mode == 'predict-only') }}
 
     steps:
       - name: Checkout code
@@ -245,6 +274,19 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
+
+      - name: Install TA-Lib system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential wget
+          wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+          tar -xzf ta-lib-0.4.0-src.tar.gz
+          cd ta-lib/
+          ./configure --prefix=/usr
+          make
+          sudo make install
+          cd ..
+          rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
 
       - name: Install dependencies
         run: pip install -r requirements-train.txt
@@ -261,15 +303,31 @@ jobs:
           echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
           echo "config=configs/base_$STRATEGY.jsonc" >> $GITHUB_OUTPUT
 
-      - name: Download artifacts
+      - name: Download artifacts (from previous jobs)
+        if: ${{ github.event.inputs.pipeline_mode == 'full' }}
         uses: actions/download-artifact@v4
         with:
           name: trained-models-${{ steps.set-defaults.outputs.symbol }}-${{ steps.set-defaults.outputs.freq }}
 
-      - name: Download features
+      - name: Download features (from previous jobs)
+        if: ${{ github.event.inputs.pipeline_mode == 'full' }}
         uses: actions/download-artifact@v4
         with:
           name: features-and-labels-${{ steps.set-defaults.outputs.symbol }}-${{ steps.set-defaults.outputs.freq }}
+
+      - name: Download data from Azure Files (predict-only mode)
+        if: ${{ github.event.inputs.pipeline_mode == 'predict-only' }}
+        run: |
+          SHARE_NAME="data-itb-${{ steps.set-defaults.outputs.freq }}"
+          LOCAL_DIR="./DATA_ITB_${{ steps.set-defaults.outputs.freq }}/${{ steps.set-defaults.outputs.symbol }}"
+          echo "📥 Downloading from share: $SHARE_NAME/${{ steps.set-defaults.outputs.symbol }}"
+          mkdir -p "$LOCAL_DIR"
+
+          az storage file download-batch \
+            --account-name "${{ vars.AZURE_STORAGE_ACCOUNT }}" \
+            --account-key "${{ secrets.AZURE_STORAGE_KEY }}" \
+            --source "$SHARE_NAME/${{ steps.set-defaults.outputs.symbol }}" \
+            --destination "$LOCAL_DIR"
 
       - name: Run predictions
         run: |
