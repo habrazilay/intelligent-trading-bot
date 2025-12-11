@@ -1,0 +1,305 @@
+name: Order Book Collection - Automated
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: 'Trading symbol'
+        required: true
+        type: choice
+        options:
+          - BTCUSDT
+          - ETHUSDT
+          - BNBUSDT
+          - SOLUSDT
+        default: 'BTCUSDT'
+      duration:
+        description: 'Collection duration'
+        required: true
+        type: choice
+        options:
+          - 24h
+          - 48h
+          - 72h
+          - 168h
+        default: '168h'
+      save_interval:
+        description: 'Save interval'
+        required: true
+        type: choice
+        options:
+          - 30m
+          - 1h
+          - 6h
+        default: '30m'
+
+  # Scheduled: Run weekly to refresh orderbook data
+  schedule:
+    - cron: '0 0 * * 0'  # Every Sunday at midnight UTC
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ============================================================================
+  # JOB 1: Collect Order Book Data
+  # ============================================================================
+  collect-orderbook:
+    name: Collect Order Book Data
+    runs-on: ubuntu-latest
+    timeout-minutes: 10080  # 7 days max
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-minimal.txt
+
+      - name: Set defaults
+        id: set-defaults
+        run: |
+          SYMBOL="${{ github.event.inputs.symbol || 'BTCUSDT' }}"
+          DURATION="${{ github.event.inputs.duration || '168h' }}"
+          SAVE_INTERVAL="${{ github.event.inputs.save_interval || '30m' }}"
+
+          echo "symbol=$SYMBOL" >> $GITHUB_OUTPUT
+          echo "duration=$DURATION" >> $GITHUB_OUTPUT
+          echo "save_interval=$SAVE_INTERVAL" >> $GITHUB_OUTPUT
+
+      - name: Collect order book data
+        env:
+          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+        run: |
+          echo "🚀 Starting order book collection..."
+          echo "   Symbol: ${{ steps.set-defaults.outputs.symbol }}"
+          echo "   Duration: ${{ steps.set-defaults.outputs.duration }}"
+          echo "   Save interval: ${{ steps.set-defaults.outputs.save_interval }}"
+
+          python scripts/collect_orderbook.py \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --duration ${{ steps.set-defaults.outputs.duration }} \
+            --save-interval ${{ steps.set-defaults.outputs.save_interval }} \
+            --output DATA_ORDERBOOK/
+
+      - name: Verify collected data
+        run: |
+          python scripts/verify_orderbook_data.py
+
+      - name: Upload to Azure Blob Storage
+        if: success()
+        run: |
+          az storage blob upload-batch \
+            --account-name ${{ vars.AZURE_STORAGE_ACCOUNT }} \
+            --account-key ${{ secrets.AZURE_STORAGE_KEY }} \
+            --destination orderbook \
+            --source DATA_ORDERBOOK/ \
+            --pattern "${{ steps.set-defaults.outputs.symbol }}_orderbook_*.parquet" \
+            --overwrite
+
+      - name: Create collection summary
+        run: |
+          echo "## Order Book Collection Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Symbol: ${{ steps.set-defaults.outputs.symbol }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Duration: ${{ steps.set-defaults.outputs.duration }}" >> $GITHUB_STEP_SUMMARY
+          echo "📊 Files: $(ls DATA_ORDERBOOK/*.parquet | wc -l)" >> $GITHUB_STEP_SUMMARY
+          echo "💾 Size: $(du -sh DATA_ORDERBOOK/ | cut -f1)" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================================
+  # JOB 2: Train with Order Flow Features (after collection)
+  # ============================================================================
+  train-with-orderflow:
+    name: Train Model with Order Flow
+    runs-on: ubuntu-latest
+    needs: collect-orderbook
+    if: github.event.inputs.duration == '168h'  # Only train after 7-day collection
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements-train.txt
+
+      - name: Set defaults
+        id: set-defaults
+        run: |
+          SYMBOL="${{ github.event.inputs.symbol || 'BTCUSDT' }}"
+          echo "symbol=$SYMBOL" >> $GITHUB_OUTPUT
+
+      - name: Download orderbook data from Azure
+        run: |
+          az storage blob download-batch \
+            --account-name ${{ vars.AZURE_STORAGE_ACCOUNT }} \
+            --account-key ${{ secrets.AZURE_STORAGE_KEY }} \
+            --source orderbook \
+            --destination DATA_ORDERBOOK/ \
+            --pattern "${{ steps.set-defaults.outputs.symbol }}_orderbook_*.parquet"
+
+      - name: Download historical klines
+        if: steps.download-klines.outputs.cache-hit != 'true'
+        env:
+          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+        run: |
+          python -m scripts.download_binance \
+            -c configs/btcusdt_5m_orderflow.jsonc \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq 5m
+
+      - name: Generate features (with orderflow)
+        run: |
+          python -m scripts.features \
+            -c configs/btcusdt_5m_orderflow.jsonc \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq 5m
+
+      - name: Generate labels
+        run: |
+          python -m scripts.labels \
+            -c configs/btcusdt_5m_orderflow.jsonc \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq 5m
+
+      - name: Train model (orderflow)
+        run: |
+          python -m scripts.train \
+            -c configs/btcusdt_5m_orderflow.jsonc \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq 5m
+
+      - name: Run backtesting
+        run: |
+          python -m scripts.simulate \
+            -c configs/btcusdt_5m_orderflow.jsonc \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq 5m
+
+      - name: Upload orderflow results
+        uses: actions/upload-artifact@v4
+        with:
+          name: orderflow-results-${{ steps.set-defaults.outputs.symbol }}
+          path: |
+            DATA_ITB_5m/${{ steps.set-defaults.outputs.symbol }}/signal_models.txt
+            DATA_ITB_5m/${{ steps.set-defaults.outputs.symbol }}/features.csv
+          retention-days: 30
+
+  # ============================================================================
+  # JOB 3: Train Baseline (no orderflow) for comparison
+  # ============================================================================
+  train-baseline:
+    name: Train Baseline Model (no orderflow)
+    runs-on: ubuntu-latest
+    needs: collect-orderbook
+    if: github.event.inputs.duration == '168h'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements-train.txt
+
+      - name: Set defaults
+        id: set-defaults
+        run: |
+          SYMBOL="${{ github.event.inputs.symbol || 'BTCUSDT' }}"
+          echo "symbol=$SYMBOL" >> $GITHUB_OUTPUT
+
+      - name: Download historical klines
+        env:
+          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+          BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
+        run: |
+          python -m scripts.download_binance \
+            -c configs/base_aggressive.jsonc \
+            --symbol ${{ steps.set-defaults.outputs.symbol }} \
+            --freq 5m
+
+      - name: Run baseline pipeline (no orderflow)
+        run: |
+          make run SYMBOL=${{ steps.set-defaults.outputs.symbol }} FREQ=5m STRATEGY=aggressive
+
+      - name: Upload baseline results
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-results-${{ steps.set-defaults.outputs.symbol }}
+          path: |
+            DATA_ITB_5m/${{ steps.set-defaults.outputs.symbol }}/signal_models_aggressive.txt
+            DATA_ITB_5m/${{ steps.set-defaults.outputs.symbol }}/features_aggressive.csv
+          retention-days: 30
+
+  # ============================================================================
+  # JOB 4: Compare Results
+  # ============================================================================
+  compare-results:
+    name: Compare Orderflow vs Baseline
+    runs-on: ubuntu-latest
+    needs: [train-with-orderflow, train-baseline]
+
+    steps:
+      - name: Download orderflow results
+        uses: actions/download-artifact@v4
+        with:
+          name: orderflow-results-${{ github.event.inputs.symbol }}
+          path: ./orderflow
+
+      - name: Download baseline results
+        uses: actions/download-artifact@v4
+        with:
+          name: baseline-results-${{ github.event.inputs.symbol }}
+          path: ./baseline
+
+      - name: Compare results
+        run: |
+          echo "## 📊 Orderflow vs Baseline Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Orderflow Features (36 features)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          head -20 orderflow/signal_models.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Baseline (17 features)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          head -20 baseline/signal_models_aggressive.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Send Telegram notification
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          if [ "$STATUS" = "success" ]; then
+            EMOJI="✅"
+            MSG="Order flow model training completed!"
+          else
+            EMOJI="❌"
+            MSG="Order flow model training failed!"
+          fi
+
+          curl -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="$EMOJI $MSG%0A%0ASymbol: ${{ github.event.inputs.symbol }}%0ADuration: ${{ github.event.inputs.duration }}%0A%0ACheck: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
