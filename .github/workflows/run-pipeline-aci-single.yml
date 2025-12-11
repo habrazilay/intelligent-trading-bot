@@ -31,11 +31,6 @@ on:
         required: false
         default: ''
 
-env:
-  ACR_LOGIN_SERVER: itbacr.azurecr.io
-  ACR_IMAGE: itbacr.azurecr.io/itb-bot
-  AZURE_RESOURCE_GROUP: rg-itb-dev
-
 jobs:
   run-pipeline:
     name: Full Pipeline in ACI
@@ -47,6 +42,7 @@ jobs:
       STRATEGY: ${{ github.event.inputs.strategy }}
       CONFIG_PATH: configs/base_${{ github.event.inputs.strategy }}.jsonc
       IMAGE_TAG: ${{ github.event.inputs.image_tag || 'dev-training' }}
+      ACR_IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/itb-bot
 
     steps:
       - name: Azure Login
@@ -78,17 +74,17 @@ jobs:
           echo "🧹 Deleting old container (if exists)..."
           az container delete \
             --name "$CONTAINER_NAME" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
           echo "🚀 Creating container $CONTAINER_NAME..."
 
           az container create \
             --name "$CONTAINER_NAME" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --image "${{ env.ACR_IMAGE }}:${{ env.IMAGE_TAG }}" \
             --os-type Linux \
-            --registry-login-server "${{ env.ACR_LOGIN_SERVER }}" \
+            --registry-login-server "${{ vars.ACR_LOGIN_SERVER }}" \
             --registry-username "${{ secrets.ACR_USERNAME }}" \
             --registry-password "${{ secrets.ACR_PASSWORD }}" \
             --restart-policy Never \
@@ -155,7 +151,7 @@ jobs:
           while true; do
             STATE=$(az container show \
               --name "$CONTAINER_NAME" \
-              --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
               --query "containers[0].instanceView.currentState.state" -o tsv)
 
             echo "Container state: $STATE"
@@ -163,7 +159,7 @@ jobs:
             if [ "$STATE" = "Terminated" ]; then
               EXIT_CODE=$(az container show \
                 --name "$CONTAINER_NAME" \
-                --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+                --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
                 --query "containers[0].instanceView.currentState.exitCode" -o tsv)
 
               echo "Container finished with exit code: $EXIT_CODE"
@@ -181,7 +177,7 @@ jobs:
           echo "📜 Container logs:"
           az container logs \
             --name "$CONTAINER_NAME" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}"
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}"
 
       - name: Cleanup container
         if: always()
@@ -191,7 +187,7 @@ jobs:
           echo "🧹 Cleaning up container..."
           az container delete \
             --name "$CONTAINER_NAME" \
-            --resource-group "${{ env.AZURE_RESOURCE_GROUP }}" \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --yes || true
 
       - name: Pipeline Summary
