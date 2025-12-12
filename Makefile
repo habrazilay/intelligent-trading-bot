@@ -821,12 +821,16 @@ forex-test:
 	python3 service/adapters/metaapi_adapter.py
 
 forex-download-eurusd:
-	@echo "Downloading EURUSD 1h data..."
-	python -m scripts.download_forex --symbol EURUSD --timeframe 1h --days 365
+	@echo "Downloading EURUSD 1h data (Yahoo Finance - FREE)..."
+	python -m scripts.download_forex_yfinance --symbol EURUSD --timeframe 1h --days 730
 
 forex-download-all:
-	@echo "Downloading all major Forex pairs..."
-	python -m scripts.download_forex --all-pairs --timeframe 1h --days 365
+	@echo "Downloading all major Forex pairs (Yahoo Finance - FREE)..."
+	python -m scripts.download_forex_yfinance --all-pairs --timeframe 1h --days 730
+
+forex-download-metaapi:
+	@echo "Downloading EURUSD via MetaApi (requires deployed account)..."
+	python -m scripts.download_forex --symbol EURUSD --timeframe 1h --days 365
 
 forex-pipeline-eurusd:
 	@echo "Running Forex EURUSD pipeline..."
@@ -845,8 +849,8 @@ forex-shadow:
 forex-train-full:
 	@echo "Full Forex training pipeline..."
 	@echo ""
-	@echo "Step 1: Download EURUSD data (365 days)..."
-	python -m scripts.download_forex --symbol EURUSD --timeframe 1h --days 365
+	@echo "Step 1: Download EURUSD data (730 days from Yahoo Finance)..."
+	python -m scripts.download_forex_yfinance --symbol EURUSD --timeframe 1h --days 730
 	@echo ""
 	@echo "Step 2: Run ML pipeline..."
 	python -m scripts.merge -c configs/forex_eurusd_1h.jsonc

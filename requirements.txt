@@ -10,8 +10,8 @@ tqdm
 
 # Downloaders
 python-binance>=1.0.32
+yfinance>=0.2.40  # For free Forex/stock data from Yahoo Finance
 #MetaTrader5>=5.0.4874; sys_platform == 'win32'  # If mt5 venue is used
-#yfinance
 #curl-cffi  # Used in yahoo downloder
 
 # Features/label generation
