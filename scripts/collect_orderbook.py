@@ -39,17 +39,24 @@ try:
 except ImportError:
     HAS_APP = False
 
-# Configure logging (similar to download_binance.py)
+# Configure logging - use unique log file per execution to avoid overwriting
+log_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+log_filename = f"logs/collect_orderbook_{log_timestamp}.log"
+
+# Ensure logs directory exists
+Path("logs").mkdir(exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("collect_orderbook.log", mode="w", encoding="utf-8"),
+        logging.FileHandler(log_filename, mode="a", encoding="utf-8"),  # append mode!
     ],
 )
 log = logging.getLogger(__name__)
+log.info(f"Log file: {log_filename}")
 
 # Global state
 orderbook_snapshots = deque(maxlen=100000)  # Keep last 100k snapshots in memory
