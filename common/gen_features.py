@@ -218,11 +218,11 @@ def generate_features_talib(df, config: dict, last_rows: int = 0):
         fn_columns = columns
 
         # Special cases: Some TA-Lib functions require specific named inputs
-        # ATR, CCI: high, low, close
+        # ATR, CCI, ADX, ADXR, DX, MINUS_DI, PLUS_DI, WILLR: high, low, close
         if (
             isinstance(original_column_names, list)
             and len(original_column_names) == 3
-            and func_name.upper() in ("ATR", "CCI")
+            and func_name.upper() in ("ATR", "CCI", "ADX", "ADXR", "DX", "MINUS_DI", "PLUS_DI", "WILLR")
         ):
             fn_columns = {
                 "high": df[original_column_names[0]].interpolate(),

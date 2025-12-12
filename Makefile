@@ -833,13 +833,22 @@ forex-download-metaapi:
 	python -m scripts.download_forex --symbol EURUSD --timeframe 1h --days 365
 
 forex-pipeline-eurusd:
-	@echo "Running Forex EURUSD pipeline..."
+	@echo "Running Forex EURUSD pipeline (SVC)..."
 	python -m scripts.merge -c configs/forex_eurusd_1h.jsonc
 	python -m scripts.features -c configs/forex_eurusd_1h.jsonc
 	python -m scripts.labels -c configs/forex_eurusd_1h.jsonc
 	python -m scripts.train -c configs/forex_eurusd_1h.jsonc
 	python -m scripts.predict -c configs/forex_eurusd_1h.jsonc
 	python -m scripts.signals -c configs/forex_eurusd_1h.jsonc
+
+forex-pipeline-lgbm:
+	@echo "Running Forex EURUSD pipeline (LightGBM)..."
+	python -m scripts.merge -c configs/forex_eurusd_1h_lgbm.jsonc
+	python -m scripts.features -c configs/forex_eurusd_1h_lgbm.jsonc
+	python -m scripts.labels -c configs/forex_eurusd_1h_lgbm.jsonc
+	python -m scripts.train -c configs/forex_eurusd_1h_lgbm.jsonc
+	python -m scripts.predict -c configs/forex_eurusd_1h_lgbm.jsonc
+	python -m scripts.signals -c configs/forex_eurusd_1h_lgbm.jsonc
 
 forex-shadow:
 	@echo "Running Forex EURUSD shadow mode (MT5 Demo)..."
