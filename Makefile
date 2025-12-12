@@ -76,8 +76,10 @@ help:
 	@echo "    make analyze-staging-custom     - Custom: LOG_FILE=... CAPITAL=... RISK=..."
 	@echo ""
 	@echo "  Order Flow Collection:"
-	@echo "    make verify-orderbook       - Verify collected orderbook data"
-	@echo "    make collect-orderbook      - Start 7-day orderbook collection"
+	@echo "    make collect-orderbook-all  - Start ALL symbols (BTC,ETH,BNB,SOL,XRP)"
+	@echo "    make collect-orderbook-status - Check collector status"
+	@echo "    make collect-orderbook-stop - Stop all collectors"
+	@echo "    make verify-orderbook       - Verify collected data"
 	@echo ""
 	@echo "  GCP Cloud ML:"
 	@echo "    make gcp-setup-automated    - Automated GCP setup (15 min)"
@@ -575,17 +577,48 @@ verify-orderbook:
 	python scripts/verify_orderbook_data.py
 
 collect-orderbook:
-	@echo "Starting 7-day orderbook collection..."
-	@echo "This will run in background with nohup"
-	@echo "Monitor with: tail -f collector_7days.log"
+	@echo "Starting 7-day orderbook collection for BTCUSDT..."
+	@mkdir -p logs
 	nohup python scripts/collect_orderbook.py \
 		--symbol BTCUSDT \
 		--duration 7d \
-		--save-interval 6h \
-		> collector_7days.log 2>&1 &
-	@echo "Collection started! PID: $$!"
-	@echo "Monitor: tail -f collector_7days.log"
-	@echo "Check status: ps aux | grep collect_orderbook"
+		--save-interval 30m \
+		> logs/orderbook_BTCUSDT.log 2>&1 &
+	@echo "BTCUSDT started! PID: $$!"
+
+collect-orderbook-all:
+	@echo "Starting 7-day orderbook collection for ALL symbols..."
+	@mkdir -p logs
+	@for symbol in BTCUSDT ETHUSDT BNBUSDT SOLUSDT XRPUSDT; do \
+		echo "Starting $$symbol..."; \
+		nohup python scripts/collect_orderbook.py \
+			--symbol $$symbol \
+			--duration 7d \
+			--save-interval 30m \
+			> logs/orderbook_$$symbol.log 2>&1 & \
+		sleep 2; \
+	done
+	@echo ""
+	@echo "All collectors started!"
+	@echo "Monitor: tail -f logs/orderbook_*.log"
+	@echo "Status:  ps aux | grep collect_orderbook"
+	@echo "Stop:    pkill -f collect_orderbook"
+
+collect-orderbook-status:
+	@echo "Orderbook collectors status:"
+	@ps aux | grep "[c]ollect_orderbook" || echo "  No collectors running"
+	@echo ""
+	@echo "Recent logs:"
+	@for f in logs/orderbook_*.log; do \
+		if [ -f "$$f" ]; then \
+			echo "  $$(basename $$f): $$(tail -1 $$f 2>/dev/null || echo 'empty')"; \
+		fi; \
+	done
+
+collect-orderbook-stop:
+	@echo "Stopping all orderbook collectors..."
+	@pkill -f "collect_orderbook" || echo "No collectors running"
+	@echo "Done"
 
 # =============================================================================
 # GCP Cloud ML Operations

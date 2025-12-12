@@ -29,6 +29,12 @@ ACCOUNT="${AZURE_STORAGE_ACCOUNT:-stitbdev}"
 
 # Verificar credenciais Azure
 check_azure_credentials() {
+  # Load from .env.dev if exists
+  if [[ -f ".env.dev" && -z "${AZURE_STORAGE_KEY:-}" ]]; then
+    echo "==> Carregando AZURE_STORAGE_KEY de .env.dev..."
+    export AZURE_STORAGE_KEY=$(grep -E "^AZURE_STORAGE_KEY=" .env.dev | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+  fi
+
   if [[ -z "${AZURE_STORAGE_KEY:-}" ]]; then
     echo "==> Buscando storage key via az CLI..."
     export AZURE_STORAGE_KEY=$(az storage account keys list \
@@ -38,12 +44,14 @@ check_azure_credentials() {
     if [[ -z "${AZURE_STORAGE_KEY:-}" ]]; then
       echo "ERRO: Não foi possível obter AZURE_STORAGE_KEY."
       echo "      Opções:"
-      echo "        1. export AZURE_STORAGE_KEY='...'"
-      echo "        2. az login (para usar az CLI)"
+      echo "        1. Adicionar AZURE_STORAGE_KEY no .env.dev"
+      echo "        2. export AZURE_STORAGE_KEY='...'"
+      echo "        3. az login (para usar az CLI)"
       exit 1
     fi
   fi
   export AZURE_STORAGE_ACCOUNT="$ACCOUNT"
+  echo "==> Storage key carregada (ending in ...${AZURE_STORAGE_KEY: -4})"
 }
 
 # Upload de um diretório específico

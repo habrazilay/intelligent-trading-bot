@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-Sync local data to Azure Storage Account.
+Sync local data to Azure Blob Storage.
 
-Uploads:
-- Orderbook data (DATA_ORDERBOOK/)
-- Trade logs (logs/trades/)
-- Position snapshots
-- Training data (DATA_ITB_*)
+Uploads to Azure Blob Container 'itb-data':
+- orderbook/: Orderbook parquet files
+- trades/: Trade logs
+- klines/1h/: 1-hour klines data
+- klines/5m/: 5-minute klines data
+- klines/1m/: 1-minute klines data
+
+Requires AZURE_STORAGE_KEY in .env.dev
 
 Usage:
     python -m scripts.sync_to_azure --all
@@ -27,10 +30,10 @@ load_dotenv('.env.dev')
 
 # Azure Storage config
 STORAGE_ACCOUNT = os.getenv('AZURE_STORAGE_ACCOUNT', 'stitbdev')
-CONTAINER_NAME = 'itb-data'
-RESOURCE_GROUP = os.getenv('AZURE_RESOURCE_GROUP', 'rg-itb-dev')
+STORAGE_KEY = os.getenv('AZURE_STORAGE_KEY', '')
+BLOB_CONTAINER = 'itb-data'
 
-# Local paths to sync
+# Local paths to sync to blob container
 SYNC_PATHS = {
     'orderbook': {
         'local': 'DATA_ORDERBOOK',
@@ -72,14 +75,14 @@ def run_az_command(cmd: list) -> tuple[bool, str]:
 
 
 def ensure_container_exists():
-    """Create container if it doesn't exist."""
-    print(f"Checking container '{CONTAINER_NAME}'...")
+    """Create blob container if it doesn't exist."""
+    print(f"Checking blob container '{BLOB_CONTAINER}'...")
 
     cmd = [
         'az', 'storage', 'container', 'create',
-        '--name', CONTAINER_NAME,
+        '--name', BLOB_CONTAINER,
         '--account-name', STORAGE_ACCOUNT,
-        '--auth-mode', 'login',
+        '--account-key', STORAGE_KEY,
         '--only-show-errors'
     ]
 
@@ -87,11 +90,11 @@ def ensure_container_exists():
     if not success:
         print(f"Warning: Could not create/check container: {output}")
     else:
-        print(f"Container '{CONTAINER_NAME}' ready")
+        print(f"Blob container '{BLOB_CONTAINER}' ready")
 
 
 def sync_folder(name: str, config: dict, dry_run: bool = False):
-    """Sync a local folder to Azure Storage."""
+    """Sync a local folder to Azure Blob Storage."""
     local_path = Path(config['local'])
     remote_path = config['remote']
     pattern = config['pattern']
@@ -108,7 +111,7 @@ def sync_folder(name: str, config: dict, dry_run: bool = False):
 
     print(f"\n{'[DRY RUN] ' if dry_run else ''}Syncing {name}:")
     print(f"  Local: {local_path} ({len(files)} files)")
-    print(f"  Remote: {CONTAINER_NAME}/{remote_path}")
+    print(f"  Remote: {BLOB_CONTAINER}/{remote_path}")
 
     if dry_run:
         for f in files[:5]:
@@ -117,14 +120,14 @@ def sync_folder(name: str, config: dict, dry_run: bool = False):
             print(f"    ... and {len(files) - 5} more files")
         return
 
-    # Use azcopy for efficient sync (or az storage blob upload-batch)
+    # Upload to Blob Storage
     cmd = [
         'az', 'storage', 'blob', 'upload-batch',
         '--source', str(local_path),
-        '--destination', CONTAINER_NAME,
+        '--destination', BLOB_CONTAINER,
         '--destination-path', remote_path,
         '--account-name', STORAGE_ACCOUNT,
-        '--auth-mode', 'login',
+        '--account-key', STORAGE_KEY,
         '--pattern', pattern,
         '--overwrite', 'true',
         '--only-show-errors'
@@ -140,18 +143,16 @@ def sync_folder(name: str, config: dict, dry_run: bool = False):
 
 
 def get_storage_stats():
-    """Get stats about what's in Azure Storage."""
-    print("\n=== Azure Storage Stats ===")
-
+    """Get stats about what's in Azure Blob Storage."""
+    print("\n=== Azure Blob Storage Stats ===")
     cmd = [
         'az', 'storage', 'blob', 'list',
-        '--container-name', CONTAINER_NAME,
+        '--container-name', BLOB_CONTAINER,
         '--account-name', STORAGE_ACCOUNT,
-        '--auth-mode', 'login',
+        '--account-key', STORAGE_KEY,
         '--query', '[].{name: name, size: properties.contentLength}',
         '--output', 'table'
     ]
-
     success, output = run_az_command(cmd)
     if success:
         print(output)
@@ -160,7 +161,7 @@ def get_storage_stats():
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Sync data to Azure Storage')
+    parser = argparse.ArgumentParser(description='Sync data to Azure Blob Storage')
     parser.add_argument('--all', action='store_true', help='Sync all data')
     parser.add_argument('--orderbook', action='store_true', help='Sync orderbook data')
     parser.add_argument('--trades', action='store_true', help='Sync trade logs')
@@ -175,18 +176,17 @@ def main():
         args.all = True
 
     print("=" * 60)
-    print(f"  Azure Storage Sync - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"  Azure Blob Storage Sync - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"  Storage Account: {STORAGE_ACCOUNT}")
-    print(f"  Container: {CONTAINER_NAME}")
+    print(f"  Container: {BLOB_CONTAINER}")
     print("=" * 60)
 
-    # Check Azure CLI login
-    print("\nChecking Azure CLI login...")
-    success, _ = run_az_command(['az', 'account', 'show', '--query', 'name', '-o', 'tsv'])
-    if not success:
-        print("Error: Not logged in to Azure CLI. Run 'az login' first.")
+    # Check storage key
+    if not STORAGE_KEY:
+        print("\nError: AZURE_STORAGE_KEY not found in .env.dev")
+        print("Add it with: AZURE_STORAGE_KEY=your_key_here")
         sys.exit(1)
-    print("Azure CLI authenticated")
+    print(f"\nStorage key loaded (ending in ...{STORAGE_KEY[-4:]})")
 
     # Ensure container exists
     ensure_container_exists()
