@@ -1,0 +1,164 @@
+{
+    "train": false,
+
+    "venue": "metaapi",
+
+    "telegram_bot_token": "<token>",
+    "telegram_chat_id": "<chat-id-to-publish-messages>",
+
+    "data_folder": "DATA_FOREX_1h",
+
+    "symbol": "EURUSD",
+
+    "description": "EURUSD 1h Forex Shadow Mode - Demo Account",
+
+    "freq": "1h",
+
+    // Forex has lower volatility than crypto
+    "label_horizon": 24,
+    "features_horizon": 672,
+    "train_length": 0,
+    "predict_length": 168,
+    "append_overlap_records": 5,
+
+    // === DATA SOURCES ===
+
+    "data_sources": [
+        {"folder": "EURUSD", "file": "klines", "column_prefix": ""}
+    ],
+
+    // === GENERATE FEATURES ===
+
+    "feature_sets": [
+        {"column_prefix": "", "generator": "talib", "feature_prefix": "", "config": {"columns": ["close"], "functions": ["SMA"], "windows": [1, 3, 6, 12, 24, 168, 672]}},
+        {"column_prefix": "", "generator": "talib", "feature_prefix": "", "config": {"columns": ["close"], "functions": ["LINEARREG_SLOPE"], "windows": [3, 6, 12, 24, 168, 672]}},
+        {"column_prefix": "", "generator": "talib", "feature_prefix": "", "config": {"columns": ["close"], "functions": ["STDDEV"], "windows": [3, 6, 12, 24, 168, 672]}},
+        {"column_prefix": "", "generator": "talib", "feature_prefix": "", "config": {"columns": ["close"], "functions": ["RSI"], "windows": [14, 24]}},
+        {"column_prefix": "", "generator": "talib", "feature_prefix": "", "config": {"columns": ["high", "low", "close"], "functions": ["ATR"], "windows": [14, 24]}}
+    ],
+
+    // === LABELS ===
+    // Lower thresholds for Forex (0.3% vs 2-3% for crypto)
+
+    "label_sets": [
+        {"column_prefix": "", "generator": "highlow2", "feature_prefix": "", "config": {"columns": ["close", "high", "low"], "function": "high", "thresholds": [0.3], "tolerance": 0.1, "horizon": 24, "names": ["high_03"]}},
+        {"column_prefix": "", "generator": "highlow2", "feature_prefix": "", "config": {"columns": ["close", "high", "low"], "function": "low", "thresholds": [0.3], "tolerance": 0.1, "horizon": 24, "names": ["low_03"]}}
+    ],
+
+    // === TRAIN ===
+
+    "train_features": [
+        "close_SMA_1", "close_SMA_3", "close_SMA_6", "close_SMA_12", "close_SMA_24", "close_SMA_168",
+        "close_LINEARREG_SLOPE_3", "close_LINEARREG_SLOPE_6", "close_LINEARREG_SLOPE_12", "close_LINEARREG_SLOPE_24", "close_LINEARREG_SLOPE_168",
+        "close_STDDEV_3", "close_STDDEV_6", "close_STDDEV_12", "close_STDDEV_24", "close_STDDEV_168",
+        "close_RSI_14", "close_RSI_24",
+        "ATR_14", "ATR_24"
+    ],
+
+    "labels": ["high_03", "low_03"],
+
+    "train_feature_sets": [
+    {
+        "generator": "train_features", "config": {
+    }}
+    ],
+
+    "algorithms": [
+        {
+          "name": "svc",
+          "algo": "svc",
+          "params": {"is_scale": true, "length": 8760},
+          "train": {"C": 1.0}
+        }
+    ],
+
+    // === GENERATE SIGNALS ===
+
+    "signal_sets": [
+        {
+            "generator": "combine", "config": {
+                "columns": ["high_03_svc", "low_03_svc"],
+                "names": "trade_score",
+                "combine": "difference",
+                "coefficient": 1.0, "constant": 0.0
+        }},
+        {
+            "generator": "threshold_rule", "config": {
+                "columns": "trade_score",
+                "names": ["buy_signal_column", "sell_signal_column"],
+                "parameters": {
+                    "buy_signal_threshold": 0.005,
+                    "sell_signal_threshold": -0.005
+                }
+        }}
+    ],
+
+    // === OUTPUTS ===
+
+    "output_sets": [
+        {"generator": "score_notification_model", "config": {
+            "score_notification": true,
+            "score_column_names": ["trade_score"],
+            "notify_band_up": true,
+            "notify_band_dn": true,
+            "positive_bands": [
+                {"edge": 0.005, "frequency": null, "sign": ">>BUY", "bold": true, "text": "BUY ZONE"},
+                {"edge": 0.003, "frequency": null, "sign": ">", "bold": false, "text": "bullish"},
+                {"edge": 0.001, "frequency": null, "sign": "", "text": "weak bullish"}
+            ],
+            "negative_bands": [
+                {"edge": -0.001, "frequency": null, "sign": "", "text": "weak bearish"},
+                {"edge": -0.003, "frequency": null, "sign": "<", "bold": false, "text": "bearish"},
+                {"edge": -0.005, "frequency": null, "sign": "<<SELL", "bold": true, "text": "SELL ZONE"}
+            ]
+        }},
+        {"generator": "trader_simulation", "config": {
+            "buy_signal_column": "buy_signal_column",
+            "sell_signal_column": "sell_signal_column"
+        }}
+    ],
+
+    // === TRADE MODEL (SHADOW MODE) ===
+    // Shadow mode: logs trades but doesn't execute them
+
+    "trade_model": {
+        "no_trades_only_data_processing": false,
+        "test_order_before_submit": false,
+        "simulate_order_execution": true,
+
+        // Forex lot size (0.01 = micro lot = ~$1000 notional for EUR/USD)
+        "lot_size": 0.01,
+        "percentage_used_for_trade": 2.0,
+        "limit_price_adjustment": 0.00005,
+
+        // Risk management
+        "stop_loss_pips": 30,
+        "take_profit_pips": 60,
+        "max_positions": 1
+    },
+
+    // === SIMULATION ===
+
+    "simulate_model": {
+        "data_start": 0,
+        "data_end": null,
+        "direction": "long",
+        "topn_to_store": 10,
+        "signal_generator": "threshold_rule",
+        "buy_sell_equal": false,
+        "grid": {
+            "buy_signal_threshold": [0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007, 0.008],
+            "sell_signal_threshold": [-0.001, -0.002, -0.003, -0.004, -0.005, -0.006, -0.007, -0.008]
+        }
+    },
+
+    "rolling_predict": {
+        "data_start": "2023-01-01 00:00:00",
+        "data_end": null,
+        "prediction_start": null,
+        "prediction_size": 2160,
+        "prediction_steps": 4,
+        "use_multiprocessing": false,
+        "max_workers": 8
+    }
+}

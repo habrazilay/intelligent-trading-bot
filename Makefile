@@ -837,6 +837,42 @@ forex-pipeline-eurusd:
 	python -m scripts.predict -c configs/forex_eurusd_1h.jsonc
 	python -m scripts.signals -c configs/forex_eurusd_1h.jsonc
 
+forex-shadow:
+	@echo "Running Forex EURUSD shadow mode (MT5 Demo)..."
+	@echo "Account: MetaQuotes Demo ($100,000)"
+	ENABLE_LIVE_TRADING=true python -m service.server -c configs/forex_eurusd_1h_shadow.jsonc
+
+forex-train-full:
+	@echo "Full Forex training pipeline..."
+	@echo ""
+	@echo "Step 1: Download EURUSD data (365 days)..."
+	python -m scripts.download_forex --symbol EURUSD --timeframe 1h --days 365
+	@echo ""
+	@echo "Step 2: Run ML pipeline..."
+	python -m scripts.merge -c configs/forex_eurusd_1h.jsonc
+	python -m scripts.features -c configs/forex_eurusd_1h.jsonc
+	python -m scripts.labels -c configs/forex_eurusd_1h.jsonc
+	python -m scripts.train -c configs/forex_eurusd_1h.jsonc
+	python -m scripts.predict -c configs/forex_eurusd_1h.jsonc
+	python -m scripts.signals -c configs/forex_eurusd_1h.jsonc
+	@echo ""
+	@echo "Training complete! Run 'make forex-shadow' to start shadow mode"
+
+forex-status:
+	@echo "MT5 Demo Account Status:"
+	@python3 -c "\
+from dotenv import load_dotenv; load_dotenv('.env.dev'); \
+from service.adapters.metaapi_adapter import MetaApiAdapter; \
+adapter = MetaApiAdapter(); \
+info = adapter.get_account_info(); \
+positions = adapter.get_positions(); \
+print(f'  Balance:  \$${info.get(\"balance\", 0):,.2f}'); \
+print(f'  Equity:   \$${info.get(\"equity\", 0):,.2f}'); \
+print(f'  Margin:   \$${info.get(\"margin\", 0):,.2f}'); \
+print(f'  Free:     \$${info.get(\"freeMargin\", 0):,.2f}'); \
+print(f'  Positions: {len(positions)}'); \
+[print(f'    {p[\"symbol\"]}: {p[\"type\"]} {p[\"volume\"]} @ {p[\"openPrice\"]} | P/L: \$${p.get(\"profit\", 0):.2f}') for p in positions]"
+
 # =============================================================================
 # Azure Storage Sync
 # =============================================================================
